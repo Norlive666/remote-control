@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -45,15 +46,21 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 val keyHeight=minOf(60.dp,height)
                 val density=LocalDensity.current
                 val canvasPx=with(density){Offset(width.toPx(),height.toPx())}
+                val textMeasurer=rememberTextMeasurer()
+                val keyWidths=vm.keys.map { key ->
+                    val textWidth=textMeasurer.measure(key.label,style=MaterialTheme.typography.labelLarge.copy(fontSize=11.sp),maxLines=1).size.width
+                    maxOf(keyWidth,with(density){textWidth.toDp()}+20.dp)
+                }
+                val allKeysWidth=keyWidths.fold(keyWidth+18.dp){total,item->total+item}
 
-                Column(Modifier.width((width-keyWidth*4-24.dp).coerceAtLeast(80.dp))) {
+                Column(Modifier.width((width-allKeysWidth-24.dp).coerceAtLeast(80.dp))) {
                     Text("ROBOT CONTROL",fontSize=10.sp,color=Muted,letterSpacing=2.sp)
                     Text(if(vm.layoutEditing)"编辑布局" else "操控面板",fontSize=if(compact)19.sp else 23.sp,fontWeight=FontWeight.Medium)
                     Text(if(vm.layoutEditing)"使能已关闭" else vm.status,fontSize=11.sp,color=Muted,maxLines=1)
                 }
                 vm.keys.forEachIndexed { i,key ->
                     if(key.action!="hide") {
-                        PositionedItem(vm,"key$i",width-keyWidth*(4-i)-6.dp*(3-i),0.dp,keyWidth,keyHeight,canvasPx) {
+                        PositionedItem(vm,"key$i",width-keyWidth-keyWidths.drop(i).fold(0.dp){total,item->total+item}-6.dp*(3-i),0.dp,keyWidths[i],keyHeight,canvasPx) {
                             KeyButton(key.label,key.action,key.action=="stop",enabled=!vm.layoutEditing) { action(key.action) }
                         }
                     }

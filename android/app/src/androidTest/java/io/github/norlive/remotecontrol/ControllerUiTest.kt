@@ -16,7 +16,7 @@ class ControllerUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit() } }
+        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setKey(0,"连接","connect") } }
     }
     private fun editLayout() {
         compose.onNodeWithText("设置",useUnmergedTree=true).performClick()
@@ -31,11 +31,12 @@ class ControllerUiTest {
             assertEquals(PanelPosition(.31f,.67f),reloaded.layoutPositions["leftStick"])
             assertFalse(model().controls.enabled)
         }
-        val saved=compose.onNodeWithTag("move-leftStick").fetchSemanticsNode().boundsInRoot
         compose.activityRule.scenario.recreate()
         val recreated=compose.onNodeWithTag("move-leftStick").fetchSemanticsNode().boundsInRoot
-        assertEquals(saved.left,recreated.left,2f)
-        assertEquals(saved.top,recreated.top,2f)
+        val canvas=compose.onNodeWithTag("panel-canvas").fetchSemanticsNode().boundsInRoot
+        // Window insets can change during recreation; saved positions are relative to the canvas.
+        assertEquals(.31f,(recreated.left-canvas.left)/(canvas.width-recreated.width),.01f)
+        assertEquals(.67f,(recreated.top-canvas.top)/(canvas.height-recreated.height),.01f)
         editLayout()
         compose.onNodeWithText("恢复默认",useUnmergedTree=true).performClick()
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
