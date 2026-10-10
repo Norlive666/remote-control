@@ -4,12 +4,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class ControllerUiTest {
@@ -34,8 +31,7 @@ class ControllerUiTest {
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -882",substring=true)
         compose.onRoot().performTouchInput { cancel() }
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
-        val context=InstrumentationRegistry.getInstrumentation().targetContext
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot(File(context.getExternalFilesDir(null),"controller.png"))
+
     }
     @Test fun stopRemainsLatchedAcrossResetAndSettingsOpen() {
         compose.onNodeWithText("急停",useUnmergedTree=true).performClick()
