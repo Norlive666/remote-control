@@ -164,6 +164,7 @@ private fun BoxScope.PositionedItem(vm: RemoteViewModel,id: String,defaultX: Dp,
         },contentAlignment=Alignment.Center) { content() }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SliderControl(title: String,value: Int,active: Boolean,onChange: (Int)->Unit) {
     Column(Modifier.fillMaxSize().softCard().padding(horizontal=10.dp,vertical=4.dp)) {
