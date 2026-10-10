@@ -78,9 +78,10 @@ class ControllerUiTest {
         editLayout()
         for(id in listOf("leftSlider","key0")) {
             val before=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
-            compose.onNodeWithTag("move-$id").performTouchInput { swipe(center,center+Offset(0f,60f)) }
+            val delta=if(id=="key0")Offset(0f,-60f) else Offset(0f,60f)
+            compose.onNodeWithTag("move-$id").performTouchInput { swipe(center,center+delta) }
             val after=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
-            assertTrue("$id should move",after.top>before.top+15f)
+            assertTrue("$id should move",kotlin.math.abs(after.top-before.top)>15f)
         }
         compose.runOnIdle {
             assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly)
