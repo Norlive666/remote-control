@@ -12,7 +12,7 @@ Tech Stack: existing Kotlin / Compose / SharedPreferences; no new dependencies.
 - Editing turns off enable and zeros axes, blocks control changes and enable; save/cancel never re-enable.
 - Bluetooth may continue sending disabled frames; protocol and STM32 are unchanged.
 - Saved overrides have stable IDs: leftStick, rightStick, leftSlider, rightSlider, enable, key0, key1, key2.
-- Keep v1.0.0 layout as the responsive default; keep each item inside its available canvas.
+- Use the user-provided Clean Robot Remote Controller.html as the responsive default; keep each item inside its available canvas.
 - v1.1.0 / versionCode 2, same local signing key, source and release uploaded as previously authorized.
 
 ### Task 1: pure position and edit model
@@ -34,3 +34,8 @@ Files: RemoteViewModel.kt, MainActivity.kt, new EditablePanel.kt, ControllerUiTe
 - [ ] Review only changed layout model, persistence, gesture handling and edit safety; fix confirmed findings and repeat affected verification.
 - [ ] Local sign latest unsigned release APK with existing key; verify signature, versionCode 2, alignment and certificate continuity.
 - [ ] Document editing and verified boundaries, upload source; release v1.1.0 APK/checksums. Verify remote asset digests match local files.
+
+### 用户追加：HTML 布局调整
+- [ ] 更新 UI 验收：顶部功能入口、两个滑块在摇杆上方，中央蓝牙使能卡片位于左右摇杆之间；长名称通过 TextLayoutResult 确认完整显示，避免系统字体像素换算假设。
+- [ ] EditablePanel 改三列卡片布局，保留八个稳定 ID 和草稿拖动；MainActivity 的颜色/摇杆与按钮绘制匹配 HTML。
+- [ ] 所有交互测试和构建通过后检查实际截图，使用本机密钥签名发布。

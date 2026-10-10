@@ -1,6 +1,8 @@
 package io.github.norlive.remotecontrol
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,7 +21,7 @@ class ControllerUiTest {
         compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setKey(0,"连接","connect") } }
     }
     private fun editLayout() {
-        compose.onNodeWithText("设置",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("panel-settings").performClick()
         compose.onNodeWithText("编辑布局").performClick()
     }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
@@ -42,11 +44,22 @@ class ControllerUiTest {
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
         compose.runOnIdle { assertTrue(RemoteViewModel(compose.activity.application).layoutPositions.isEmpty()) }
     }
+    @Test fun referenceLayoutHasTopSlidersAndCentralBluetoothHub() {
+        val left=compose.onNodeWithTag("move-leftStick").fetchSemanticsNode().boundsInRoot
+        val right=compose.onNodeWithTag("move-rightStick").fetchSemanticsNode().boundsInRoot
+        val hub=compose.onNodeWithTag("move-enable").fetchSemanticsNode().boundsInRoot
+        val slider=compose.onNodeWithTag("move-leftSlider").fetchSemanticsNode().boundsInRoot
+        assertTrue(slider.bottom<=left.top+2f)
+        assertTrue(left.right<hub.left && hub.right<right.left)
+        compose.onNodeWithTag("panel-settings").assertIsDisplayed()
+    }
     @Test fun sixCharacterFunctionKeyLabelFitsWithoutClipping() {
         compose.runOnIdle { model().setKey(0,"开启电机使能","connect") }
-        val label=compose.onNodeWithText("开启电机使能",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
-        val pixelsPerSp=compose.activity.resources.displayMetrics.scaledDensity
-        assertTrue("All six characters should fit on one line",label.width>=66f*pixelsPerSp-2f)
+        val layouts=mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText("开启电机使能",useUnmergedTree=true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(1,layouts.size)
+        assertFalse("The full label should render without overflow",layouts.single().hasVisualOverflow)
+        assertEquals(6,layouts.single().getLineEnd(0))
         compose.runOnIdle { model().setKey(0,"连接","connect") }
     }
     @Test fun enableControlDragClampsToCanvasEdges() {
@@ -102,7 +115,7 @@ class ControllerUiTest {
     }
     @Test fun layoutEditingMovesOnlyDraftAndKeepsAxesNeutral() {
         val initial=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithText("设置",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("panel-settings").performClick()
         compose.onNodeWithText("编辑布局").performClick()
         compose.onNodeWithTag("move-leftStick").performTouchInput { swipe(center,center+Offset(80f,-35f)) }
         val moved=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
@@ -117,7 +130,7 @@ class ControllerUiTest {
         compose.onNodeWithText("急停锁定").assertIsDisplayed()
         compose.onNodeWithText("复位",useUnmergedTree=true).performClick()
         compose.onNodeWithText("急停锁定").assertIsDisplayed()
-        compose.onNodeWithText("设置",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("panel-settings").performClick()
         compose.onNodeWithText("面板设置").assertIsDisplayed()
     }
 }
