@@ -1,8 +1,6 @@
 package io.github.norlive.remotecontrol
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -18,7 +16,7 @@ class ControllerUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setKey(0,"连接","connect") } }
+        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig()) } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -54,19 +52,42 @@ class ControllerUiTest {
         assertTrue(left.right<hub.left && hub.right<right.left)
         compose.onNodeWithTag("panel-settings").assertIsDisplayed()
     }
-    @Test fun sixCharacterFunctionKeyLabelFitsWithoutClipping() {
-        compose.runOnIdle { model().setKey(0,"开启电机使能","connect") }
-        val layouts=mutableListOf<TextLayoutResult>()
-        compose.onNodeWithText("开启电机使能",useUnmergedTree=true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-        assertEquals(1,layouts.size)
-        val text=layouts.single()
-        // Paragraph width can round up by a pixel even when every glyph fits.
-        assertTrue(text.multiParagraph.intrinsics.maxIntrinsicWidth<=text.size.width+1f)
-        assertTrue(text.getBoundingBox(5).right<=text.size.width+1f)
-        assertEquals(6,text.getLineEnd(0))
-        assertEquals(1,text.lineCount)
-        assertFalse(text.didOverflowHeight)
-        compose.runOnIdle { model().setKey(0,"连接","connect") }
+    @Test fun redundantButtonsAreRemovedAndModesCycleIndependently() {
+        compose.onNodeWithText("连接",useUnmergedTree=true).assertDoesNotExist()
+        compose.onNodeWithText("复位",useUnmergedTree=true).assertDoesNotExist()
+        compose.onNodeWithText("急停",useUnmergedTree=true).assertDoesNotExist()
+        compose.onNodeWithTag("stick-mode-0").performClick()
+        compose.runOnIdle {
+            model().axes(true,1000,800);model().axes(false,1000,800)
+            assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly)
+            assertTrue(model().controls.ry>0)
+        }
+        compose.onNodeWithTag("stick-mode-0").performClick()
+        compose.runOnIdle {
+            assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly)
+            model().axes(true,800,-1000)
+            assertEquals(0,model().controls.lx);assertEquals(-1000,model().controls.ly)
+        }
+        compose.onNodeWithTag("stick-mode-0").performClick()
+        compose.runOnIdle { assertEquals(JoystickMode.FREE,model().stickConfigs[0].mode) }
+    }
+    @Test fun stickSettingsApplyAndSurviveReload() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("stick-range-0").performScrollTo().performTextReplacement("255")
+        compose.onNodeWithTag("stick-apply-0").performScrollTo().performClick()
+        compose.onNodeWithTag("stick-range-1").performScrollTo().performTextReplacement("0")
+        compose.onNodeWithTag("stick-apply-1").assertIsNotEnabled()
+        compose.onNodeWithText("完成",useUnmergedTree=true).performScrollTo().performClick()
+        compose.runOnIdle {
+            model().setStickConfig(0,model().stickConfigs[0].copy(deadZonePercent=10))
+            model().axes(true,1000,80)
+            assertEquals(255,model().controls.lx);assertEquals(0,model().controls.ly)
+            val reloaded=RemoteViewModel(compose.activity.application)
+            assertEquals(JoystickConfig(deadZonePercent=10,maxValue=255),reloaded.stickConfigs[0])
+            assertEquals(JoystickConfig(),reloaded.stickConfigs[1])
+        }
+        compose.activityRule.scenario.recreate()
+        compose.runOnIdle { assertEquals(255,model().stickConfigs[0].maxValue) }
     }
     @Test fun enableControlDragClampsToCanvasEdges() {
         editLayout()
@@ -79,12 +100,12 @@ class ControllerUiTest {
         assertEquals(canvas.bottom,after.bottom,2f)
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
     }
-    @Test fun slidersAndKeysMoveWithoutChangingControlValues() {
+    @Test fun slidersMoveWithoutChangingControlValues() {
         compose.runOnIdle { model().axes(true,300,400);model().slider(0,420) }
         editLayout()
-        for(id in listOf("leftSlider","key0")) {
+        for(id in listOf("leftSlider","rightSlider")) {
             val before=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
-            val delta=if(id=="key0")Offset(0f,-60f) else Offset(0f,60f)
+            val delta=Offset(0f,60f)
             compose.onNodeWithTag("move-$id").performTouchInput { swipe(center,center+delta) }
             val after=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
             assertTrue("$id should move",kotlin.math.abs(after.top-before.top)>15f)
@@ -111,11 +132,11 @@ class ControllerUiTest {
             updatePointerTo(1,Offset(right.left+right.width*.2f,right.top+right.height*.8f))
             move()
         }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 882",substring=true)
-        compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -882",substring=true)
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 876",substring=true)
+        compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -876",substring=true)
         compose.onRoot().performTouchInput { up(0) }
         compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
-        compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -882",substring=true)
+        compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -876",substring=true)
         compose.onRoot().performTouchInput { cancel() }
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
 
@@ -133,12 +154,21 @@ class ControllerUiTest {
         val restored=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
         org.junit.Assert.assertEquals(initial.left,restored.left,2f)
     }
-    @Test fun stopRemainsLatchedAcrossResetAndSettingsOpen() {
-        compose.onNodeWithText("急停",useUnmergedTree=true).performClick()
-        compose.onNodeWithText("急停锁定").assertIsDisplayed()
-        compose.onNodeWithText("复位",useUnmergedTree=true).performClick()
-        compose.onNodeWithText("急停锁定").assertIsDisplayed()
-        compose.onNodeWithTag("panel-settings").performClick()
-        compose.onNodeWithText("面板设置").assertIsDisplayed()
+    @Test fun deadZoneAndSingleAxisModeAreAppliedToTouchGestures() {
+        compose.runOnIdle { model().setStickConfig(0,JoystickConfig(deadZonePercent=10,maxValue=500,mode=JoystickMode.HORIZONTAL)) }
+        val left=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(0,left.center)
+            updatePointerTo(0,Offset(left.left+left.width*.84f,left.top+left.height*.2f));move()
+        }
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 500，Y 0",substring=true)
+        compose.onRoot().performTouchInput { up(0) }
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.runOnIdle { model().setStickConfig(0,JoystickConfig(deadZonePercent=10)) }
+        compose.onRoot().performTouchInput {
+            down(0,Offset(left.center.x+left.width*.02f,left.center.y-left.height*.02f))
+        }
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onRoot().performTouchInput { cancel() }
     }
 }

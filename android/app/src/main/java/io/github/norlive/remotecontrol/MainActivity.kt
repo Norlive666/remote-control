@@ -17,6 +17,8 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,7 +36,6 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -82,13 +83,9 @@ class MainActivity : ComponentActivity() {
 private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth: ()->Unit) {
     var connectionDialog by remember { mutableStateOf(false) }
     var settingsDialog by remember { mutableStateOf(false) }
-    val state=vm.controls
     fun action(name: String) {
         when(name) {
             "connect" -> { connectionDialog=true;if(!vm.connected && !vm.connecting)scan() }
-            "reset" -> vm.reset()
-            "stop" -> vm.stop()
-            "enable" -> vm.enable(!state.enabled)
         }
     }
     EditablePanel(vm) { name ->
@@ -114,23 +111,15 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
     if(settingsDialog) SettingsDialog(vm,onEdit={settingsDialog=false;vm.beginLayoutEdit()}) { settingsDialog=false }
 }
 
-@Composable
-internal fun KeyButton(label: String,action: String,danger: Boolean=false,enabled: Boolean=true,onClick: ()->Unit) {
-    val icon=when(action) {"connect"->Icons.Outlined.Bluetooth;"reset"->Icons.Outlined.Refresh;"stop"->Icons.Outlined.StopCircle;"enable"->Icons.Outlined.PowerSettingsNew;else->Icons.Outlined.Tune}
-    FilledTonalButton(onClick,enabled=enabled,shape=RoundedCornerShape(13.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp),colors=ButtonDefaults.filledTonalButtonColors(containerColor=if(danger)Color(0xfffff1f2)else Color.White,contentColor=if(danger)Color(0xffef4444)else Ink),modifier=Modifier.widthIn(min=48.dp)) {
-        Column(horizontalAlignment=Alignment.CenterHorizontally) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp));Text(label,style=MaterialTheme.typography.labelLarge.copy(fontSize=11.sp,lineHeight=14.sp),maxLines=1,softWrap=false) }
-    }
-}
-
 /** Separate gesture scope per stick; a pointer never transfers from one stick to the other. */
 @Composable
-internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,Int)->Unit) {
+internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: JoystickConfig,onMove: (Int,Int)->Unit) {
     val currentMove by rememberUpdatedState(onMove)
     BoxWithConstraints(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
         val side=minOf(maxWidth,maxHeight,260.dp)
         Canvas(Modifier.testTag(label).size(side).clip(RoundedCornerShape(22.dp)).background(Pad).border(1.dp,Line,RoundedCornerShape(22.dp))
             .semantics { contentDescription="$label，X $x，Y $y" }
-            .pointerInput(active) {
+            .pointerInput(active,config) {
                 if(!active)return@pointerInput
                 fun update(position: Offset) {
                     currentMove(((position.x-size.width/2f)/(size.width*.34f)*1000).roundToInt().coerceIn(-1000,1000),(-(position.y-size.height/2f)/(size.height*.34f)*1000).roundToInt().coerceIn(-1000,1000))
@@ -147,7 +136,7 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,I
             drawLine(Color(0xffcbd5e1),Offset(0f,center.y),Offset(size.width,center.y),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))
             drawLine(Color(0xffcbd5e1),Offset(center.x,0f),Offset(center.x,size.height),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))
             drawRoundRect(Line,topLeft=Offset(size.width*.13f,size.height*.13f),size=androidx.compose.ui.geometry.Size(size.width*.74f,size.height*.74f),cornerRadius=androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),style=Stroke(1.dp.toPx()))
-            val knob=Offset(center.x+x/1000f*size.width*.34f,center.y-y/1000f*size.height*.34f)
+            val knob=Offset(center.x+x/config.maxValue.toFloat()*size.width*.34f,center.y-y/config.maxValue.toFloat()*size.height*.34f)
             val radius=minOf(28.dp.toPx(),size.width*.15f)
             drawCircle(Color.White,radius,knob);drawCircle(Brush.radialGradient(listOf(Color(0xff38bdf8),Accent,Color(0xff01579b)),center=knob-Offset(radius*.35f,radius*.35f),radius=radius*1.5f),radius-3.5.dp.toPx(),knob)
         }
@@ -156,20 +145,28 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,I
 
 @Composable
 private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Unit) {
-    val labels=mapOf("connect" to "连接面板","reset" to "数值复位","stop" to "急停归零","enable" to "切换使能","hide" to "隐藏")
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth(.8f).heightIn(max=340.dp)) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose){Text("完成")} }
                 OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
-                vm.keys.forEachIndexed { i,key ->
-                    var text by remember(i) { mutableStateOf(key.label) }
-                    var expanded by remember { mutableStateOf(false) }
-                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(text,{text=it.take(6);vm.setKey(i,text,key.action)},label={Text("按钮 ${i+1} 名称")},singleLine=true,modifier=Modifier.weight(1f))
-                        Box { OutlinedButton({expanded=true}){Text(labels[key.action] ?: key.action)};DropdownMenu(expanded,{expanded=false}){labels.forEach { (action,name)->DropdownMenuItem(text={Text(name)},onClick={vm.setKey(i,text,action);expanded=false}) }} }
+                vm.stickConfigs.forEachIndexed { index,config ->
+                    var deadZone by remember(config) { mutableStateOf(config.deadZonePercent.toFloat()) }
+                    var range by remember(config) { mutableStateOf(config.maxValue.toString()) }
+                    val parsedRange=range.toIntOrNull()
+                    Text(if(index==0)"左摇杆" else "右摇杆",fontWeight=FontWeight.Bold)
+                    Text("死区 ${deadZone.roundToInt()}%",fontSize=12.sp)
+                    Slider(deadZone,{deadZone=it},valueRange=0f..30f,steps=29,modifier=Modifier.testTag("stick-deadzone-$index"))
+                    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(range,{range=it},label={Text("最大绝对值（1～1000）")},prefix={Text("±")},
+                            singleLine=true,isError=parsedRange==null || parsedRange !in 1..1000,
+                            keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.weight(1f).testTag("stick-range-$index"))
+                        OutlinedButton({vm.setStickConfig(index,config.copy(deadZonePercent=deadZone.roundToInt(),maxValue=parsedRange!!))},
+                            enabled=parsedRange!=null && parsedRange in 1..1000,modifier=Modifier.testTag("stick-apply-$index")){Text("应用")}
                     }
+                    HorizontalDivider()
                 }
+                Text("每个轴分别应用死区；自由模式支持斜向，方向按钮可限制单轴。修改设置后该摇杆归零，松手后重新操作。",fontSize=11.sp,color=Muted)
                 Text("HC-05：20 Hz / STM32 默认 9600；BT630：50 Hz / STM32 115200。",fontSize=12.sp,color=Muted)
                 Text("最近提交的数据帧（不代表 STM32 已收到）",fontSize=12.sp)
                 Text(vm.lastFrame,fontSize=11.sp,fontFamily=FontFamily.Monospace,color=Muted)

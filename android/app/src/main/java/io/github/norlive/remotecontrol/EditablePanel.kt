@@ -20,7 +20,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -52,15 +51,6 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 val active=!state.stopped && !vm.layoutEditing
                 val density=LocalDensity.current
                 val canvasPx=with(density){Offset(width.toPx(),height.toPx())}
-                val keyHeight=48.dp
-                val textMeasurer=rememberTextMeasurer()
-                val keyWidths=vm.keys.map { key ->
-                    val textWidth=textMeasurer.measure(key.label,style=MaterialTheme.typography.labelLarge.copy(fontSize=11.sp,lineHeight=14.sp),maxLines=1).size.width
-                    maxOf(52.dp,with(density){textWidth.toDp()}+22.dp)
-                }
-                val allKeysWidth=keyWidths.fold(12.dp){total,item->total+item}
-                val keysX=(width-allKeysWidth)/2
-
                 PositionedItem(vm,"leftSlider",0.dp,0.dp,sliderWidth,sliderHeight,canvasPx) {
                     SliderControl("滑块 1",state.slider1,active){vm.slider(0,it)}
                 }
@@ -68,10 +58,10 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                     SliderControl("滑块 2",state.slider2,active){vm.slider(1,it)}
                 }
                 PositionedItem(vm,"leftStick",0.dp,mainY,columnWidth,mainHeight,canvasPx) {
-                    StickControl("左摇杆","CH 1 & 2",state.lx,state.ly,active){x,y->vm.axes(true,x,y)}
+                    StickControl("左摇杆",0,state.lx,state.ly,active,vm.stickConfigs[0],{vm.cycleStickMode(0)}){x,y->vm.axes(true,x,y)}
                 }
                 PositionedItem(vm,"rightStick",rightX,mainY,columnWidth,mainHeight,canvasPx) {
-                    StickControl("右摇杆","CH 3 & 4",state.rx,state.ry,active){x,y->vm.axes(false,x,y)}
+                    StickControl("右摇杆",1,state.rx,state.ry,active,vm.stickConfigs[1],{vm.cycleStickMode(1)}){x,y->vm.axes(false,x,y)}
                 }
                 Column(Modifier.offset(x=middleX,y=mainY).width(columnWidth),horizontalAlignment=Alignment.CenterHorizontally) {
                     Text("ROBOT CONTROL",fontSize=9.sp,color=Muted,letterSpacing=1.sp,fontWeight=FontWeight.Bold)
@@ -79,14 +69,6 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 }
                 PositionedItem(vm,"enable",middleX,hubY,columnWidth,hubHeight,canvasPx) {
                     BluetoothHub(vm){action("connect")}
-                }
-                vm.keys.forEachIndexed { i,key ->
-                    if(key.action!="hide") {
-                        val x=keysX+keyWidths.take(i).fold(0.dp){total,item->total+item}+6.dp*i
-                        PositionedItem(vm,"key$i",x,height-keyHeight,keyWidths[i],keyHeight,canvasPx) {
-                            KeyButton(key.label,key.action,key.action=="stop",enabled=!vm.layoutEditing){action(key.action)}
-                        }
-                    }
                 }
                 // Keep the fixed entry above movable controls so layout recovery is always reachable.
                 OutlinedButton({action("settings")},enabled=!vm.layoutEditing,shape=RoundedCornerShape(16.dp),
@@ -136,7 +118,7 @@ private fun BluetoothHub(vm: RemoteViewModel,onConnect: ()->Unit) {
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
             Row(verticalAlignment=Alignment.CenterVertically) {
                 Switch(vm.controls.enabled,{vm.enable(it)},enabled=vm.connected && !vm.layoutEditing,modifier=Modifier.height(32.dp))
-                Text(if(vm.controls.stopped)"急停锁定" else "使能",fontSize=10.sp,color=if(vm.controls.stopped)Color(0xffef4444)else Ink)
+                Text("使能",fontSize=10.sp,color=Ink)
             }
             Text(if(vm.mode==LinkMode.HC05)"20 Hz" else "50 Hz",fontSize=10.sp,color=Muted,fontFamily=FontFamily.Monospace)
         }
@@ -181,16 +163,18 @@ private fun SliderControl(title: String,value: Int,active: Boolean,onChange: (In
 }
 
 @Composable
-private fun StickControl(title: String,channels: String,x: Int,y: Int,active: Boolean,onMove: (Int,Int)->Unit) {
+private fun StickControl(title: String,index: Int,x: Int,y: Int,active: Boolean,config: JoystickConfig,onMode: ()->Unit,onMove: (Int,Int)->Unit) {
     Column(Modifier.fillMaxSize().softCard().padding(10.dp)) {
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
             Text(title,fontSize=11.sp,fontWeight=FontWeight.Bold)
             Text("X $x  Y $y",fontSize=10.sp,color=Muted,fontFamily=FontFamily.Monospace)
         }
-        Box(Modifier.weight(1f).fillMaxWidth().padding(vertical=5.dp)) { Joystick(title,x,y,active,onMove) }
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-            Text("松手自动归中",fontSize=9.sp,color=Muted)
-            Text(channels,fontSize=9.sp,color=Muted,fontFamily=FontFamily.Monospace)
+        Box(Modifier.weight(1f).fillMaxWidth().padding(vertical=5.dp)) { Joystick(title,x,y,active,config,onMove) }
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+            Text("死区 ${config.deadZonePercent}% · ±${config.maxValue}",fontSize=9.sp,color=Muted)
+            OutlinedButton(onMode,enabled=active,contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp),modifier=Modifier.height(32.dp).testTag("stick-mode-$index")) {
+                Text(config.mode.title,fontSize=10.sp)
+            }
         }
     }
 }

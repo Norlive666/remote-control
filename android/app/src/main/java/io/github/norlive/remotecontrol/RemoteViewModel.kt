@@ -18,7 +18,6 @@ import java.io.IOException
 
 enum class LinkMode(val title: String, val period: Long) { HC05("HC-05 · 经典蓝牙",50), BT630("BT630 · BLE",20) }
 data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice)
-data class FunctionKey(val label: String, val action: String)
 
 @SuppressLint("MissingPermission")
 class RemoteViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,9 +44,11 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var lastReceived by mutableStateOf("—"); private set
     var lastFrame by mutableStateOf("—"); private set
     var sent by mutableLongStateOf(0); private set
-    var keys by mutableStateOf(listOf(FunctionKey("连接","connect"),FunctionKey("复位","reset"),FunctionKey("急停","stop")).mapIndexed { i,k ->
-        val action=preferences.getString("action$i",k.action) ?: k.action
-        FunctionKey(preferences.getString("label$i",k.label) ?: k.label,if(action in actions)action else k.action)
+    var stickConfigs by mutableStateOf(List(2) { index ->
+        JoystickConfig(
+            preferences.getInt("stick.$index.deadZone",5).coerceIn(0,30),
+            preferences.getInt("stick.$index.range",1000).coerceIn(1,1000),
+            JoystickMode.entries.firstOrNull { it.name==preferences.getString("stick.$index.mode",null) } ?: JoystickMode.FREE)
     }); private set
     private var transport: BluetoothTransport?=null
     private var connectJob: Job?=null
@@ -138,11 +139,24 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }
     fun foreground(value: Boolean) { foreground=value;if(!value)disconnect() }
-    fun axes(left: Boolean,x: Int,y: Int) { if(layoutEditing)return;session.axes(left,x,y);sync() }
+    fun axes(left: Boolean,x: Int,y: Int) {
+        if(layoutEditing)return
+        val (mappedX,mappedY)=stickConfigs[if(left)0 else 1].map(x,y)
+        session.axes(left,mappedX,mappedY);sync()
+    }
+    fun setStickConfig(index: Int,config: JoystickConfig) {
+        if(layoutEditing)return
+        session.axes(index==0,0,0);sync()
+        stickConfigs=stickConfigs.mapIndexed { i,current -> if(i==index)config else current }
+        preferences.edit().putInt("stick.$index.deadZone",config.deadZonePercent)
+            .putInt("stick.$index.range",config.maxValue).putString("stick.$index.mode",config.mode.name).apply()
+    }
+    fun cycleStickMode(index: Int) {
+        val current=stickConfigs[index]
+        setStickConfig(index,current.copy(mode=JoystickMode.entries[(current.mode.ordinal+1)%JoystickMode.entries.size]))
+    }
     fun slider(index: Int,value: Int) { if(layoutEditing)return;session.slider(index,value);sync() }
     fun enable(value: Boolean) { if(value && (!connected || !foreground || layoutEditing))return;session.enable(value);sync() }
-    fun stop() { session.stop();sync();status=if(connected)"急停已锁定 · 持续发送归零帧" else "急停已锁定" }
-    fun reset() { if(layoutEditing)return;session.reset();sync() }
     fun beginLayoutEdit() {
         if(layoutEditing)return
         session.enable(false);sync();layoutSession.begin();syncLayout()
@@ -159,14 +173,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
     private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions }
     private fun sync() { controls=session.state }
-    fun setKey(index: Int,label: String,action: String) {
-        if(action !in actions)return
-        val key=FunctionKey(label.take(6).ifBlank { "按钮" },action)
-        keys=keys.mapIndexed { i,k -> if(i==index)key else k }
-        preferences.edit().putString("label$index",key.label).putString("action$index",key.action).apply()
-    }
     override fun onCleared() { disconnect();super.onCleared() }
     companion object {
-        val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable","key0","key1","key2")
-        val actions=listOf("connect","reset","stop","enable","hide") }
+        val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable")
+    }
 }
