@@ -6,3 +6,5 @@ local.properties
 .superpowers/
 .worktrees/
 tools/.cache/
+
+dist/
