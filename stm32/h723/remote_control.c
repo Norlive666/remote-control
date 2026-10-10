@@ -39,8 +39,10 @@ void RC_GetState(RC_State_t *out) {
     unlock(key);
 }
 void RC_Tick1ms(void) {
+    uint32_t key=lock();
     if (age_ms < 300) age_ms++;
     if (age_ms == 300 && !expired) { expired=1; neutral(); }
+    unlock(key);
 }
 static uint16_t le16(const uint8_t *p) { return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1]<<8)); }
 static int16_t signed_le16(const uint8_t *p) {
@@ -68,14 +70,16 @@ static int valid(const uint8_t *p) {
 static void publish(const uint8_t *p) {
     uint8_t seq=p[3], flags=p[16], delta=(uint8_t)(seq-last_seq);
     unsigned i;
-    if (expired && (flags&1u)) return; /* Recovery must begin with an explicit disabled frame. */
-    if (!expired && have_seq && (delta==0 || delta>=128)) return;
+    uint32_t key=lock();
+    if (expired && (flags&1u)) { unlock(key); return; } /* Recovery needs a disabled frame. */
+    if (!expired && have_seq && (delta==0 || delta>=128)) { unlock(key); return; }
     have_seq=1; last_seq=seq; expired=0; age_ms=0;
     g_rc.sequence=seq; g_rc.link_valid=1; g_rc.valid_frames++;
     g_rc.stopped=(uint8_t)((flags&2u)!=0);
     g_rc.enabled=(uint8_t)((flags&1u)!=0 && !g_rc.stopped);
     for (i=0;i<4;i++) g_rc.axes[i]=g_rc.enabled ? signed_le16(p+4+2*i) : 0;
     for (i=0;i<2;i++) g_rc.sliders[i]=g_rc.enabled ? le16(p+12+2*i) : 0;
+    unlock(key);
 }
 void RC_ProcessByte(uint8_t byte) {
     unsigned i;
