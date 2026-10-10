@@ -56,9 +56,11 @@ static uint16_t crc16(const uint8_t *p) {
 }
 static int valid(const uint8_t *p) {
     unsigned i;
+    int inactive;
     if (p[0]!=0xa5 || p[1]!=0x5a || p[2]!=1 || (p[16]&~3u)!=0 || p[17]!=0 || le16(p+18)!=crc16(p)) return 0;
-    for (i=0;i<4;i++) { int16_t v=signed_le16(p+4+2*i); if (v < -1000 || v > 1000) return 0; }
-    for (i=0;i<2;i++) if (le16(p+12+2*i)>1000) return 0;
+    inactive=((p[16]&1u)==0 || (p[16]&2u)!=0);
+    for (i=0;i<4;i++) { int16_t v=signed_le16(p+4+2*i); if (v < -1000 || v > 1000 || (inactive && v!=0)) return 0; }
+    for (i=0;i<2;i++) { uint16_t v=le16(p+12+2*i); if (v>1000 || (inactive && v!=0)) return 0; }
     return 1;
 }
 static void publish(const uint8_t *p) {

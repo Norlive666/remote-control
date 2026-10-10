@@ -49,16 +49,29 @@ int main(void) {
     /* Recovery needs a fresh disabled frame before enabling. */
     frame(f,200,1000,1000,1); feed(f,20); assert(!state().enabled);
     frame(f,200,1000,1000,0); feed(f,20); assert(!state().enabled);
-    frame(f,201,1000,1000,1); feed(f,20); assert(state().enabled && state().axes[0]==1000);
-    frame(f,201,0,0,0); feed(f,20); ticks(299); assert(state().enabled);
+    frame(f,201,1000,1000,1); feed(f,20); assert(!state().enabled);
+    frame(f,202,0,0,0); feed(f,20); assert(state().sequence==202);
+    frame(f,203,1000,1000,1); feed(f,20); assert(state().enabled && state().axes[0]==1000);
+    frame(f,203,0,0,0); feed(f,20); ticks(299); assert(state().enabled);
     frame(f,100,0,0,0); feed(f,20); ticks(1); assert(!state().enabled);
     /* Sequence wraps 255 -> 0; duplicate and backwards packets remain stale. */
     fresh_reset(); frame(f,255,-1000,0,1); feed(f,20);
     frame(f,0,1000,1000,1); feed(f,20); assert(state().sequence==0 && state().axes[0]==1000);
     frame(f,255,-1000,0,1); feed(f,20); assert(state().axes[0]==1000);
-    /* Stop and disabled packets zero effective controls even with nonzero payload. */
-    frame(f,1,1000,1000,3); feed(f,20); assert(!state().enabled && state().stopped && !state().axes[0]);
-    frame(f,2,1000,1000,0); feed(f,20); assert(!state().enabled && !state().axes[0]);
+    /* Nonzero controls with stop/disabled flags violate the wire protocol. */
+    fresh_reset(); frame(f,10,1000,1000,1); feed(f,20); ticks(299);
+    frame(f,11,1000,1000,3); feed(f,20);
+    assert(state().enabled && state().sequence==10 && state().axes[0]==1000);
+    frame(f,11,1000,1000,0); feed(f,20);
+    assert(state().enabled && state().sequence==10 && state().axes[0]==1000);
+    ticks(1); assert(!state().enabled && state().sequence==10);
+    frame(f,11,0,0,2); feed(f,20); assert(state().stopped && state().sequence==11);
+    frame(f,12,0,0,0); feed(f,20); assert(!state().enabled && !state().stopped && state().sequence==12);
+    /* Independent Python binascii.crc_hqx fixture across every payload field. */
+    fresh_reset();
+    const uint8_t all_fields[20] = {0xa5,0x5a,1,255,0x18,0xfc,0xe8,3,0xff,0xff,0,0,0,0,0xe8,3,1,0,0xdc,0x37};
+    feed(all_fields,20); s=state();
+    assert(s.sequence==255 && s.enabled && s.axes[0]==-1000 && s.axes[1]==1000 && s.axes[2]==-1 && s.axes[3]==0 && s.sliders[0]==0 && s.sliders[1]==1000);
     /* Corrupted candidate containing another sync byte must resynchronize. */
     fresh_reset(); uint8_t noise[] = {0,0xa5,0,0xa5}; feed(noise,sizeof noise);
     frame(f,7,-1000,1000,1); feed(f,20); assert(state().sequence==7 && state().axes[0]==-1000);
