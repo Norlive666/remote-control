@@ -41,6 +41,13 @@ class ControllerUiTest {
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
         compose.runOnIdle { assertTrue(RemoteViewModel(compose.activity.application).layoutPositions.isEmpty()) }
     }
+    @Test fun sixCharacterFunctionKeyLabelFitsWithoutClipping() {
+        compose.runOnIdle { model().setKey(0,"开启电机使能","connect") }
+        val label=compose.onNodeWithText("开启电机使能",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
+        val pixelsPerSp=compose.activity.resources.displayMetrics.scaledDensity
+        assertTrue("All six characters should fit on one line",label.width>=66f*pixelsPerSp-2f)
+        compose.runOnIdle { model().setKey(0,"连接","connect") }
+    }
     @Test fun enableControlDragClampsToCanvasEdges() {
         editLayout()
         val canvas=compose.onNodeWithTag("panel-canvas").fetchSemanticsNode().boundsInRoot
