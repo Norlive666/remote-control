@@ -9,6 +9,7 @@ class ControlProtocolTest {
         val frame = ControlProtocol.encode(ControlState(-1000, 1000, -1, 0, 0, 1000, true), 255)
         assertArrayEquals(byteArrayOf(0xa5.toByte(),0x5a,1,0xff.toByte(),0x18,0xfc.toByte(),0xe8.toByte(),3,0xff.toByte(),0xff.toByte(),0,0,0,0,0xe8.toByte(),3,1,0),frame.copyOf(18))
         assertEquals(20,frame.size)
+        assertArrayEquals(byteArrayOf(0xdc.toByte(),0x37),frame.sliceArray(18..19))
         assertEquals(ControlProtocol.crc(frame,2,18), (frame[18].toInt() and 255) or ((frame[19].toInt() and 255) shl 8))
     }
     @Test fun disabledAndStoppedFramesNeverCarryMotion() {

@@ -43,8 +43,9 @@ class ClassicTransport : BluetoothTransport {
 
 /** Nordic owns GATT operation serialization; only one control write is submitted at a time. */
 @SuppressLint("MissingPermission")
-class Bt630Transport(context: Context, private val lost: () -> Unit) : BleManager(context), BluetoothTransport {
+class Bt630Transport(context: Context, private val lost: () -> Unit, private val received: (ByteArray) -> Unit) : BleManager(context), BluetoothTransport {
     private var tx: BluetoothGattCharacteristic? = null
+    private var rx: BluetoothGattCharacteristic? = null
     init {
         setConnectionObserver(object : ConnectionObserver {
             override fun onDeviceConnecting(device: BluetoothDevice) { }
@@ -56,11 +57,21 @@ class Bt630Transport(context: Context, private val lost: () -> Unit) : BleManage
         })
     }
     override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
+        rx = gatt.getService(uuid(0xfff0))?.getCharacteristic(uuid(0xfff1))
         tx = gatt.getService(uuid(0xfff0))?.getCharacteristic(uuid(0xfff2))
         return tx?.properties?.and(BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0 && tx != null
     }
-    override fun initialize() { requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH).enqueue() }
-    override fun onServicesInvalidated() { tx=null }
+    override fun initialize() {
+        requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH).enqueue()
+        rx?.let { characteristic ->
+            setNotificationCallback(characteristic).with { _,data -> data.value?.let(received) }
+            if(characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0)
+                enableNotifications(characteristic).enqueue()
+            else if(characteristic.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0)
+                enableIndications(characteristic).enqueue()
+        }
+    }
+    override fun onServicesInvalidated() { tx=null;rx=null }
     override suspend fun open(device: BluetoothDevice): Unit = suspendCancellableCoroutine { continuation ->
         connect(device).timeout(10000).done { if(continuation.isActive) continuation.resume(Unit) }
             .fail { _, status -> if(continuation.isActive) continuation.resumeWithException(IOException("BLE 连接失败：$status")) }.enqueue()

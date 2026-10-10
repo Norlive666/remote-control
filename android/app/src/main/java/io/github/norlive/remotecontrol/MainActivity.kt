@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -151,7 +152,7 @@ private fun KeyButton(label: String,action: String,danger: Boolean=false,onClick
 private fun Channel(title: String,sliderTitle: String,x: Int,y: Int,value: Int,compact: Boolean,modifier: Modifier,active: Boolean,onMove: (Int,Int)->Unit,onSlider: (Int)->Unit) {
     Column(modifier.fillMaxHeight(),horizontalAlignment=Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { Text(sliderTitle,fontSize=12.sp);Text("${value/10}",fontSize=12.sp,color=Accent,fontFamily=FontFamily.Monospace) }
-        Slider(value.toFloat(),{onSlider(it.roundToInt())},valueRange=0f..1000f,enabled=active,modifier=Modifier.height(if(compact)30.dp else 42.dp))
+        Slider(value.toFloat(),{onSlider(it.roundToInt())},valueRange=0f..1000f,enabled=active,modifier=Modifier.testTag(sliderTitle).height(if(compact)30.dp else 42.dp))
         Row(Modifier.fillMaxWidth().padding(bottom=5.dp),horizontalArrangement=Arrangement.SpaceBetween) {
             Text(title,fontSize=12.sp);Text("X $x  Y $y",fontSize=11.sp,color=Muted,fontFamily=FontFamily.Monospace)
         }
@@ -166,7 +167,7 @@ private fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,In
     val currentMove by rememberUpdatedState(onMove)
     BoxWithConstraints(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
         val side=minOf(maxWidth,maxHeight,260.dp)
-        Canvas(Modifier.size(side).clip(RoundedCornerShape(22.dp)).background(Pad).border(1.dp,Line,RoundedCornerShape(22.dp))
+        Canvas(Modifier.testTag(label).size(side).clip(RoundedCornerShape(22.dp)).background(Pad).border(1.dp,Line,RoundedCornerShape(22.dp))
             .semantics { contentDescription="$label，X $x，Y $y" }
             .pointerInput(active) {
                 if(!active)return@pointerInput
@@ -210,6 +211,10 @@ private fun SettingsDialog(vm: RemoteViewModel,onClose: ()->Unit) {
                 Text("HC-05：20 Hz / STM32 默认 9600；BT630：50 Hz / STM32 115200。",fontSize=12.sp,color=Muted)
                 Text("最近提交的数据帧（不代表 STM32 已收到）",fontSize=12.sp)
                 Text(vm.lastFrame,fontSize=11.sp,fontFamily=FontFamily.Monospace,color=Muted)
+                if(vm.mode==LinkMode.BT630) {
+                    Text("最近收到的 FFF1 数据（原始数据，非控制确认）",fontSize=12.sp)
+                    Text(vm.lastReceived,fontSize=11.sp,fontFamily=FontFamily.Monospace,color=Muted)
+                }
                 Text("第三方组件：Nordic Android BLE Library，BSD-3-Clause。许可证见仓库 THIRD_PARTY_NOTICES.md。",fontSize=11.sp,color=Muted)
             }
         }

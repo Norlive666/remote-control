@@ -33,6 +33,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var connecting by mutableStateOf(false); private set
     var scanning by mutableStateOf(false); private set
     var devices by mutableStateOf(listOf<DeviceRow>()); private set
+    var lastReceived by mutableStateOf("—"); private set
     var lastFrame by mutableStateOf("—"); private set
     var sent by mutableLongStateOf(0); private set
     var keys by mutableStateOf(listOf(FunctionKey("连接","connect"),FunctionKey("复位","reset"),FunctionKey("急停","stop")).mapIndexed { i,k ->
@@ -91,8 +92,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         disconnect();if(!foreground)return
         if(adapter?.isEnabled!=true){status="请先开启手机蓝牙";return}
         val token=generation
-        val link=if(mode==LinkMode.HC05)ClassicTransport() else Bt630Transport(getApplication()) { main.post { if(token==generation && connected) fail("蓝牙连接已断开") } }
-        transport=link;connecting=true;status="连接 ${row.name}…"
+        val link=if(mode==LinkMode.HC05)ClassicTransport() else Bt630Transport(getApplication(),
+            lost={ main.post { if(token==generation && connected) fail("蓝牙连接已断开") } },
+            received={ bytes -> main.post { if(token==generation)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } } })
+        transport=link;lastReceived="—";connecting=true;status="连接 ${row.name}…"
         adapter.cancelDiscovery()
         connectJob=viewModelScope.launch {
             try {
