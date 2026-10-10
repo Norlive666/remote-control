@@ -2,9 +2,13 @@
 
 横屏 Android 遥控 App：雾白方格布局、双摇杆、双滑块，支持 **HC-05 经典蓝牙 SPP** 与 **飞易通 FSC-BT630 BLE**。两种连接方式共用 20 字节协议。STM32 提供 H723VGT6、F103C8T6 的独立 `.c/.h` 接收驱动。
 
+![实际界面](docs/controller.png)
+
 ## 下载与开始测试
 
-安装 APK：[GitHub Releases](https://github.com/Norlive666/remote-control/releases)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+安装 APK：[v1.0.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.0.0/remote-control-v1.0.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+
+驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/v1.0.0/remote-control-stm32-v1.0.0.zip)。
 
 1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入对应芯片的两个源文件。
 2. **HC-05**：确认模块数据模式串口波特率为 9600、8N1；手机先在系统蓝牙中配对（PIN 以模块配置为准），App 选择 HC-05 模式、刷新并连接。STM32 调用 `RC_Init()`。
@@ -45,6 +49,7 @@ if (state.link_valid && state.enabled && !state.stopped) {
 ## 协议和构建
 
 - [20 字节协议、CRC 与示例帧](protocol/README.md)
+- [验证记录与实测边界](docs/validation.md)
 - 主机测试：`tests/c/run.sh`，覆盖两套驱动的拆包、连包、坏 CRC、序号、超时和恢复。
 - 目标编译：`tools/compile-stm32.sh`，按脚本要求提供匹配的 STM32Cube 固件目录。
 - Android：JDK 17、Android SDK 35，进入 `android/` 执行 `./gradlew testDebugUnitTest assembleRelease`。默认生成未签名 release APK；正式 APK 使用仓库外固定密钥签名。

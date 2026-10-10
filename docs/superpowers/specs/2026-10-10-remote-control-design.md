@@ -26,6 +26,8 @@ HAL/startup/system clock initialization. Existing IRQ symbols must not conflict.
 No MCU runtime or wireless latency claims without physical hardware verification.
 
 Deliver source to Norlive666/remote-control, CI tests/MCU compile checks/Android
-signed APK build, and a GitHub release containing APK and MCU source archive.
+unsigned APK build, local signing with a persistent key, and a GitHub release
+containing signed APK and MCU source archive. Signing keys/passwords remain local
+only; no signing credentials are stored in GitHub Secrets.
 Keep signing credentials outside source control and provide a continuity route for
 future updates. Include licenses and concise Chinese connection instructions.

@@ -13,23 +13,23 @@ Tech: Kotlin, Compose, Nordic BLE Library, Android SPP, STM32 HAL, C, GitHub Act
 - Tests and compiled artifacts are not proof of physical hardware performance.
 
 ### Task 1: STM32 protocol and drivers
-- [ ] Add host behavior tests for split/coalesced/invalid packets, CRC, sequence wrap,
+- [x] Add host behavior tests for split/coalesced/invalid packets, CRC, sequence wrap,
   stale frames, failsafe, flags, coherent state and boundary ranges; run red first.
-- [ ] Implement portable parser and standalone HAL packages for H723/F103.
-- [ ] Compile host tests with gcc warnings as errors and both target packages with
+- [x] Implement portable parser and standalone HAL packages for H723/F103.
+- [x] Compile host tests with gcc warnings as errors and both target packages with
   arm-none-eabi-gcc and real matching ST HAL/CMSIS headers.
-- [ ] Document resource ownership, hookup, one-init usage and IRQ conflicts.
+- [x] Document resource ownership, hookup, one-init usage and IRQ conflicts.
 
 ### Task 2: Android controller
-- [ ] Write protocol and safety-state behavior tests, observe red then implement.
-- [ ] Implement selected mist style, independent sticks, sliders, editable actions.
-- [ ] Implement HC-05 bonded-device SPP and BT630 scanning/GATT via Nordic library.
-- [ ] Implement permission flow, connection cancellation, bounded current-state
+- [x] Write protocol and safety-state behavior tests, observe red then implement.
+- [x] Implement selected mist style, independent sticks, sliders, editable actions.
+- [x] Implement HC-05 bonded-device SPP and BT630 scanning/GATT via Nordic library.
+- [x] Implement permission flow, connection cancellation, bounded current-state
   sender, stop latch, lifecycle neutralization, and persisted settings.
-- [ ] Run unit tests and build signed installable APK; inspect UI when possible.
+- [x] Run unit tests and build signed installable APK; inspect UI when possible.
 
 ### Task 3: delivery and review
-- [ ] Add pinned/reproducible build setup and CI with tests, target compile and APK.
-- [ ] Review protocol interoperability, transport lifecycle and hardware init.
-- [ ] Fix findings, rerun affected tests; release APK, driver zip and checksums.
-- [ ] Push source, verify CI and release URLs; report unperformed hardware tests.
+- [x] Add pinned/reproducible build setup and CI with tests, target compile and APK.
+- [x] Review protocol interoperability, transport lifecycle and hardware init.
+- [x] Fix findings, rerun affected tests; release APK, driver zip and checksums.
+- [x] Push source, verify CI and release URLs; report unperformed hardware tests.
