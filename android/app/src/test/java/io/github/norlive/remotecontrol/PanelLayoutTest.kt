@@ -97,4 +97,17 @@ class PanelLayoutTest {
         session.move("key0", PanelPosition(-0.2f, 1.3f))
         assertEquals(PanelPosition(0f, 1f), session.positions["key0"])
     }
+    @Test fun sizeDraftSaveCancelAndDefaultsAreIndependentOfPositions() {
+        val session=LayoutEditSession(mapOf("leftPad" to PanelPosition(.2f,.3f)),mapOf("leftPad" to .8f))
+        session.resize("leftPad",1.2f);assertEquals(.8f,session.scales["leftPad"])
+        session.begin();session.resize("leftPad",.6f)
+        assertEquals(.6f,session.scales["leftPad"]);assertEquals(.8f,session.savedScales["leftPad"])
+        session.cancel();assertEquals(.8f,session.scales["leftPad"])
+        session.begin();session.resize("leftPad",1.2f);session.save()
+        assertEquals(1.2f,session.savedScales["leftPad"])
+        session.begin();session.restoreDefaults();assertTrue(session.scales.isEmpty())
+        session.cancel();assertEquals(1.2f,session.scales["leftPad"])
+        assertEquals(PanelPosition(.2f,.3f),session.positions["leftPad"])
+        session.begin();session.resize("leftPad",9f);assertEquals(1.5f,session.scales["leftPad"])
+    }
 }

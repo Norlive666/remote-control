@@ -32,7 +32,11 @@ fun movePanelItem(
     )
 }
 
-class LayoutEditSession(saved: Map<String, PanelPosition> = emptyMap()) {
+class LayoutEditSession(saved: Map<String, PanelPosition> = emptyMap(),savedScales: Map<String, Float> = emptyMap()) {
+    var savedScales: Map<String, Float> = savedScales.toMap(); private set
+    private var draftScales: Map<String, Float> = emptyMap()
+    val scales: Map<String, Float> get() = if(editing)draftScales else savedScales
+    fun resize(id: String,scale: Float) { if(editing && scale.isFinite())draftScales=draftScales+(id to scale.coerceIn(.5f,1.5f)) }
     var saved: Map<String, PanelPosition> = saved.toMap()
         private set
     var draft: Map<String, PanelPosition> = emptyMap()
@@ -42,6 +46,7 @@ class LayoutEditSession(saved: Map<String, PanelPosition> = emptyMap()) {
     val positions: Map<String, PanelPosition> get() = if (editing) draft else saved
 
     fun begin() {
+        draftScales = savedScales.toMap()
         draft = saved.toMap()
         editing = true
     }
@@ -53,17 +58,20 @@ class LayoutEditSession(saved: Map<String, PanelPosition> = emptyMap()) {
 
     fun save() {
         if (!editing) return
+        savedScales = draftScales
+        draftScales = emptyMap()
         saved = draft
         draft = emptyMap()
         editing = false
     }
 
     fun cancel() {
+        draftScales = emptyMap()
         draft = emptyMap()
         editing = false
     }
 
     fun restoreDefaults() {
-        if (editing) draft = emptyMap()
+        if (editing) { draft = emptyMap();draftScales = emptyMap() }
     }
 }

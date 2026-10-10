@@ -17,7 +17,7 @@ class ControllerUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig()) } }
+        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig()) } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -104,7 +104,7 @@ class ControllerUiTest {
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
     }
     @Test fun slidersMoveWithoutChangingControlValues() {
-        compose.runOnIdle { model().axes(true,300,400);model().slider(0,420) }
+        compose.runOnIdle { model().setSliderConfig(0,SliderConfig(stepped=false));model().axes(true,300,400);model().slider(0,420) }
         editLayout()
         for(id in listOf("leftSlider","rightSlider")) {
             val before=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
@@ -149,9 +149,9 @@ class ControllerUiTest {
         compose.onNodeWithTag("panel-settings").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
-        compose.onNodeWithTag("move-leftStick").performTouchInput { swipe(center,center+Offset(80f,-35f)) }
+        compose.onNodeWithTag("move-leftPad").performTouchInput { swipe(center,center+Offset(45f,-25f)) }
         val moved=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
-        org.junit.Assert.assertTrue(moved.left>initial.left+30f)
+        org.junit.Assert.assertTrue(moved.left>initial.left+15f)
         compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
         val restored=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
@@ -184,5 +184,47 @@ class ControllerUiTest {
         }
         compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.onRoot().performTouchInput { cancel() }
+    }
+    @Test fun bluePadMovesWithoutMovingCardAndSizeIsSaved() {
+        editLayout()
+        val card=compose.onNodeWithTag("move-leftStick").fetchSemanticsNode().boundsInRoot
+        val before=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("move-leftPad").performTouchInput { swipe(center,center+Offset(40f,25f)) }
+        val moved=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        val afterCard=compose.onNodeWithTag("move-leftStick").fetchSemanticsNode().boundsInRoot
+        assertEquals(card.left,afterCard.left,1f);assertEquals(card.top,afterCard.top,1f)
+        assertTrue(moved.left>before.left+10f)
+        compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(.6f) }
+        val resized=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        assertTrue(resized.width<moved.width*.8f)
+        val zone=compose.onNodeWithTag("pad-zone-0").fetchSemanticsNode().boundsInRoot
+        assertTrue(resized.left>=zone.left-1f && resized.right<=zone.right+1f)
+        compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
+        compose.runOnIdle {
+            val fresh=RemoteViewModel(compose.activity.application)
+            assertEquals(.6f,fresh.layoutScales["leftPad"]!!,.001f)
+            assertNotNull(fresh.layoutPositions["leftPad"])
+        }
+        editLayout()
+        compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(1.3f) }
+        compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
+        compose.runOnIdle { assertEquals(.6f,model().layoutScales["leftPad"]!!,.001f) }
+    }
+    @Test fun slidersSnapToActualSlotsAndSettingsPersist() {
+        compose.onNodeWithTag("滑块 1").performSemanticsAction(SemanticsActions.SetProgress) { it(500f) }
+        compose.runOnIdle { assertEquals(1,model().controls.slider1) }
+        compose.onNodeWithTag("滑块 1").performSemanticsAction(SemanticsActions.SetProgress) { it(1000f) }
+        compose.runOnIdle { assertEquals(2,model().controls.slider1) }
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("slider-count-0").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+        compose.onNodeWithTag("slider-value-0-3").performScrollTo().performTextReplacement("9")
+        compose.onNodeWithTag("slider-apply-0").performScrollTo().performClick()
+        compose.onNodeWithText("完成",useUnmergedTree=true).performScrollTo().performClick()
+        compose.onNodeWithTag("滑块 1").performSemanticsAction(SemanticsActions.SetProgress) { it(1000f) }
+        compose.runOnIdle {
+            assertEquals(9,model().controls.slider1)
+            assertEquals(SliderConfig(values=listOf(0,1,2,9)),RemoteViewModel(compose.activity.application).sliderConfigs[0])
+            assertEquals(SliderConfig(),model().sliderConfigs[1])
+        }
     }
 }

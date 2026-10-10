@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
+import kotlin.math.roundToInt
 import java.io.IOException
 
 enum class LinkMode(val title: String, val period: Long) { HC05("HC-05 · 经典蓝牙",50), BT630("BT630 · BLE",20) }
@@ -31,9 +32,14 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             val x=preferences.getFloat("layout.$id.x",0f);val y=preferences.getFloat("layout.$id.y",0f)
             if(x.isFinite() && y.isFinite())id to PanelPosition(x.coerceIn(0f,1f),y.coerceIn(0f,1f)) else null
         }
+    }.toMap(),layoutIds.mapNotNull { id ->
+        val scale=preferences.getFloat("layout.$id.scale",1f)
+        if(preferences.contains("layout.$id.scale") && scale.isFinite())id to scale.coerceIn(.5f,1.5f) else null
     }.toMap())
     var layoutEditing by mutableStateOf(false); private set
     var layoutPositions by mutableStateOf(layoutSession.positions); private set
+    var layoutScales by mutableStateOf(layoutSession.scales); private set
+    var selectedLayoutId by mutableStateOf("leftPad"); private set
     var controls by mutableStateOf(session.state); private set
     var mode by mutableStateOf(if(preferences.getString("mode","HC05")=="BT630")LinkMode.BT630 else LinkMode.HC05); private set
     var status by mutableStateOf("未连接"); private set
@@ -50,6 +56,12 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             preferences.getInt("stick.$index.range",1000).coerceIn(1,1000),
             JoystickMode.entries.firstOrNull { it.name==preferences.getString("stick.$index.mode",null) } ?: JoystickMode.FREE)
     }); private set
+    var sliderConfigs by mutableStateOf(List(2) { index ->
+        val parsed=(preferences.getString("slider.$index.values","0,1,2") ?: "0,1,2").split(',').map { it.toIntOrNull() }
+        val values=if(parsed.size in 2..8 && parsed.all { it!=null && it in 0..1000 })parsed.map { it!! } else listOf(0,1,2)
+        SliderConfig(preferences.getBoolean("slider.$index.stepped",true),values)
+    }); private set
+    init { sliderConfigs.forEachIndexed { i,config -> session.slider(i,config.map(0)) };sync() }
     private var transport: BluetoothTransport?=null
     private var connectJob: Job?=null
     private var sendJob: Job?=null
@@ -155,26 +167,44 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         val current=stickConfigs[index]
         setStickConfig(index,current.copy(mode=JoystickMode.entries[(current.mode.ordinal+1)%JoystickMode.entries.size]))
     }
-    fun slider(index: Int,value: Int) { if(layoutEditing)return;session.slider(index,value);sync() }
-    fun enable(value: Boolean) { if(value && (!connected || !foreground || layoutEditing))return;session.enable(value);sync() }
+    fun slider(index: Int,value: Int) { if(layoutEditing)return;session.slider(index,sliderConfigs[index].map(value));sync() }
+    fun setSliderConfig(index: Int,config: SliderConfig) {
+        if(layoutEditing)return
+        sliderConfigs=sliderConfigs.mapIndexed { i,current -> if(i==index)config else current }
+        preferences.edit().putBoolean("slider.$index.stepped",config.stepped)
+            .putString("slider.$index.values",config.values.joinToString(",")).apply()
+        session.slider(index,config.map(0));sync()
+    }
+    fun enable(value: Boolean) {
+        if(value && (!connected || !foreground || layoutEditing))return
+        session.enable(value)
+        if(value)sliderConfigs.forEachIndexed { i,config ->
+            val current=if(i==0)session.state.slider1 else session.state.slider2
+            session.slider(i,config.map(config.position(current).roundToInt()))
+        }
+        sync()
+    }
     fun beginLayoutEdit() {
         if(layoutEditing)return
         session.enable(false);sync();layoutSession.begin();syncLayout()
     }
-    fun movePanel(id: String,position: PanelPosition) { layoutSession.move(id,position);syncLayout() }
+    fun selectPanel(id: String) { if(layoutEditing && id in layoutIds)selectedLayoutId=id }
+    fun resizePanel(scale: Float) { layoutSession.resize(selectedLayoutId,scale);syncLayout() }
+    fun movePanel(id: String,position: PanelPosition) { selectPanel(id);layoutSession.move(id,position);syncLayout() }
     fun saveLayoutEdit() {
         layoutSession.save()
         val editor=preferences.edit()
-        layoutIds.forEach { id -> editor.remove("layout.$id.x").remove("layout.$id.y") }
+        layoutIds.forEach { id -> editor.remove("layout.$id.x").remove("layout.$id.y").remove("layout.$id.scale") }
         layoutSession.saved.forEach { (id,p) -> editor.putFloat("layout.$id.x",p.x).putFloat("layout.$id.y",p.y) }
+        layoutSession.savedScales.forEach { (id,scale) -> editor.putFloat("layout.$id.scale",scale) }
         editor.apply();syncLayout()
     }
     fun cancelLayoutEdit() { layoutSession.cancel();syncLayout() }
     fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
-    private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions }
+    private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions;layoutScales=layoutSession.scales }
     private fun sync() { controls=session.state }
     override fun onCleared() { disconnect();super.onCleared() }
     companion object {
-        val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable")
+        val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable","leftPad","rightPad")
     }
 }

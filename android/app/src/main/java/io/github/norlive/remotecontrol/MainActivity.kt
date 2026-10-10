@@ -150,6 +150,7 @@ private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Uni
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose){Text("完成")} }
                 OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
+                SliderSettings(vm)
                 vm.stickConfigs.forEachIndexed { index,config ->
                     var deadZone by remember(config) { mutableStateOf(config.deadZonePercent.toFloat()) }
                     var range by remember(config) { mutableStateOf(config.maxValue.toString()) }
