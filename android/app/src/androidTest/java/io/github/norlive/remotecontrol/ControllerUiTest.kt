@@ -58,7 +58,7 @@ class ControllerUiTest {
         val layouts=mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("开启电机使能",useUnmergedTree=true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(1,layouts.size)
-        assertFalse("The full label should render without overflow",layouts.single().hasVisualOverflow)
+        assertFalse("Overflow: width=${layouts.single().didOverflowWidth}, height=${layouts.single().didOverflowHeight}, size=${layouts.single().size}, intrinsic=${layouts.single().multiParagraph.intrinsics.maxIntrinsicWidth}",layouts.single().hasVisualOverflow)
         assertEquals(6,layouts.single().getLineEnd(0))
         compose.runOnIdle { model().setKey(0,"连接","connect") }
     }

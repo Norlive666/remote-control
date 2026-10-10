@@ -29,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -44,12 +46,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
 
-internal val Ink=Color(0xff233849)
-internal val Muted=Color(0xff627789)
-internal val Accent=Color(0xff159dc9)
-internal val Surface=Color(0xfff4f7fa)
-internal val Line=Color(0xffc7d5df)
-internal val Pad=Color(0xffe5edf3)
+internal val Ink=Color(0xff1e293b)
+internal val Muted=Color(0xff64748b)
+internal val Accent=Color(0xff0288d1)
+internal val Surface=Color(0xfff4f7fb)
+internal val Line=Color(0xffe6edf5)
+internal val Pad=Color(0xffeaf1f8)
 
 class MainActivity : ComponentActivity() {
     private val model: RemoteViewModel by viewModels()
@@ -115,8 +117,8 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
 @Composable
 internal fun KeyButton(label: String,action: String,danger: Boolean=false,enabled: Boolean=true,onClick: ()->Unit) {
     val icon=when(action) {"connect"->Icons.Outlined.Bluetooth;"reset"->Icons.Outlined.Refresh;"stop"->Icons.Outlined.StopCircle;"enable"->Icons.Outlined.PowerSettingsNew;else->Icons.Outlined.Tune}
-    FilledTonalButton(onClick,enabled=enabled,shape=RoundedCornerShape(13.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp),colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color.White,contentColor=if(danger)Color(0xffc83249)else Ink),modifier=Modifier.widthIn(min=48.dp)) {
-        Column(horizontalAlignment=Alignment.CenterHorizontally) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp));Text(label,fontSize=11.sp,maxLines=1) }
+    FilledTonalButton(onClick,enabled=enabled,shape=RoundedCornerShape(13.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp),colors=ButtonDefaults.filledTonalButtonColors(containerColor=if(danger)Color(0xfffff1f2)else Color.White,contentColor=if(danger)Color(0xffef4444)else Ink),modifier=Modifier.widthIn(min=48.dp)) {
+        Column(horizontalAlignment=Alignment.CenterHorizontally) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp));Text(label,style=MaterialTheme.typography.labelLarge.copy(fontSize=11.sp,lineHeight=14.sp),maxLines=1,softWrap=false) }
     }
 }
 
@@ -142,12 +144,12 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,I
                 } finally { currentMove(0,0) }
             }) {
             val center=Offset(size.width/2,size.height/2)
-            drawLine(Line,Offset(size.width*.08f,center.y),Offset(size.width*.92f,center.y))
-            drawLine(Line,Offset(center.x,size.height*.08f),Offset(center.x,size.height*.92f))
-            drawRoundRect(Line,topLeft=Offset(size.width*.23f,size.height*.23f),size=androidx.compose.ui.geometry.Size(size.width*.54f,size.height*.54f),cornerRadius=androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),style=Stroke(1.dp.toPx()))
+            drawLine(Color(0xffcbd5e1),Offset(0f,center.y),Offset(size.width,center.y),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))
+            drawLine(Color(0xffcbd5e1),Offset(center.x,0f),Offset(center.x,size.height),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))
+            drawRoundRect(Line,topLeft=Offset(size.width*.13f,size.height*.13f),size=androidx.compose.ui.geometry.Size(size.width*.74f,size.height*.74f),cornerRadius=androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),style=Stroke(1.dp.toPx()))
             val knob=Offset(center.x+x/1000f*size.width*.34f,center.y-y/1000f*size.height*.34f)
-            val radius=minOf(23.dp.toPx(),size.width*.15f)
-            drawCircle(Color.White,radius,knob);drawCircle(Accent,radius-4.dp.toPx(),knob)
+            val radius=minOf(28.dp.toPx(),size.width*.15f)
+            drawCircle(Color.White,radius,knob);drawCircle(Brush.radialGradient(listOf(Color(0xff38bdf8),Accent,Color(0xff01579b)),center=knob-Offset(radius*.35f,radius*.35f),radius=radius*1.5f),radius-3.5.dp.toPx(),knob)
         }
     }
 }
