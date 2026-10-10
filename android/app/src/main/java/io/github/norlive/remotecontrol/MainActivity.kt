@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,8 +59,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        WindowCompat.getInsetsController(window,window.decorView).apply {
+            isAppearanceLightStatusBars=true;isAppearanceLightNavigationBars=true
+        }
         setContent {
-            MaterialTheme(colorScheme=lightColorScheme(primary=Accent,background=Surface,surface=Color.White,onSurface=Ink,onBackground=Ink)) {
+            MaterialTheme(colorScheme=lightColorScheme(primary=Accent,background=Surface,surface=Color.White,onSurface=Ink,onBackground=Ink,primaryContainer=Pad,onPrimaryContainer=Ink,secondaryContainer=Line,onSecondaryContainer=Ink)) {
                 ControllerScreen(model,::findDevices,{startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))})
             }
         }
