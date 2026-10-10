@@ -41,6 +41,17 @@ class ControllerUiTest {
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
         compose.runOnIdle { assertTrue(RemoteViewModel(compose.activity.application).layoutPositions.isEmpty()) }
     }
+    @Test fun enableControlDragClampsToCanvasEdges() {
+        editLayout()
+        val canvas=compose.onNodeWithTag("panel-canvas").fetchSemanticsNode().boundsInRoot
+        val before=compose.onNodeWithTag("move-enable").fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { swipe(before.center,Offset(canvas.right-1f,canvas.bottom-1f)) }
+        val after=compose.onNodeWithTag("move-enable").fetchSemanticsNode().boundsInRoot
+        assertTrue(after.left>before.left+30f)
+        assertEquals(canvas.right,after.right,2f)
+        assertEquals(canvas.bottom,after.bottom,2f)
+        compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
+    }
     @Test fun slidersAndKeysMoveWithoutChangingControlValues() {
         compose.runOnIdle { model().axes(true,300,400);model().slider(0,420) }
         editLayout()
