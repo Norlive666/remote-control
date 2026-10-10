@@ -58,7 +58,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }); private set
     var sliderConfigs by mutableStateOf(List(2) { index ->
         val parsed=(preferences.getString("slider.$index.values","0,1,2") ?: "0,1,2").split(',').map { it.toIntOrNull() }
-        val values=if(parsed.size in 2..8 && parsed.all { it!=null && it in 0..1000 })parsed.map { it!! } else listOf(0,1,2)
+        val values=if(parsed.size in 2..8 && parsed.distinct().size==parsed.size && parsed.all { it!=null && it in 0..1000 })parsed.map { it!! } else listOf(0,1,2)
         SliderConfig(preferences.getBoolean("slider.$index.stepped",true),values)
     }); private set
     init { sliderConfigs.forEachIndexed { i,config -> session.slider(i,config.map(0)) };sync() }

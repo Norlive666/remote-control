@@ -4,6 +4,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SliderConfigTest {
+    @Test(expected=IllegalArgumentException::class) fun duplicateSlotValuesAreRejected() {
+        SliderConfig(values=listOf(0,0,2))
+    }
+
     @Test fun defaultSliderOnlyOutputsThreeActualValues() {
         val c=SliderConfig()
         assertEquals(listOf(0,0,1,1,2,2),listOf(0,249,250,749,750,1000).map(c::map))

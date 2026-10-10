@@ -136,9 +136,9 @@ private fun BoxScope.PositionedItem(vm: RemoteViewModel,id: String,defaultX: Dp,
     val density=LocalDensity.current
     val scale=vm.layoutScales[id] ?: 1f
     val canvasWidth=with(density){canvas.x.toDp()};val canvasHeight=with(density){canvas.y.toDp()}
-    val actualWidth=(width*scale).coerceIn(minOf(width,160.dp,canvasWidth),canvasWidth)
     val minimumHeight=if(id.endsWith("Slider"))54.dp else if(id=="enable")100.dp else 150.dp
-    val actualHeight=(height*scale).coerceIn(minOf(height,minimumHeight,canvasHeight),canvasHeight)
+    val effectiveScale=panelScale(scale,width.value,height.value,minOf(width,160.dp).value,minOf(height,minimumHeight).value,canvasWidth.value,canvasHeight.value)
+    val actualWidth=width*effectiveScale;val actualHeight=height*effectiveScale
     val item=with(density){Offset(actualWidth.toPx(),actualHeight.toPx())}
     val default=with(density){PanelPosition(
         if(canvas.x>item.x)(defaultX.toPx()/(canvas.x-item.x)).coerceIn(0f,1f)else 0f,

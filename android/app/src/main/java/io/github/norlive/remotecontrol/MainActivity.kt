@@ -116,7 +116,7 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
 internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: JoystickConfig,onMove: (Int,Int)->Unit) {
     val currentMove by rememberUpdatedState(onMove)
     BoxWithConstraints(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
-        val side=minOf(maxWidth,maxHeight,260.dp)
+        val side=minOf(maxWidth,maxHeight)
         Canvas(Modifier.testTag(label).size(side).clip(RoundedCornerShape(22.dp)).background(Pad).border(1.dp,Line,RoundedCornerShape(22.dp))
             .semantics { contentDescription="$label，X $x，Y $y" }
             .pointerInput(active,config) {

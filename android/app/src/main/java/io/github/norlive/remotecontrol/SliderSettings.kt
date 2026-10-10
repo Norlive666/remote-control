@@ -18,14 +18,14 @@ internal fun SliderSettings(vm: RemoteViewModel) {
         var stepped by remember(config) { mutableStateOf(config.stepped) }
         var values by remember(config) { mutableStateOf(config.values.map(Int::toString)) }
         val parsed=values.map(String::toIntOrNull)
-        val valid=parsed.all { it!=null && it in 0..1000 }
+        val valid=parsed.distinct().size==parsed.size && parsed.all { it!=null && it in 0..1000 }
         Text("滑块 ${index+1}",fontWeight=FontWeight.Bold)
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             FilterChip(stepped,{stepped=true},label={Text("分档")},modifier=Modifier.testTag("slider-stepped-$index"))
             FilterChip(!stepped,{stepped=false},label={Text("连续")},modifier=Modifier.testTag("slider-continuous-$index"))
         }
         if(stepped) {
-            Text("${values.size} 档 · 每档发送实际数值",fontSize=12.sp)
+            Text("${values.size} 档 · 每档发送实际数值（不可重复）",fontSize=12.sp)
             Slider(values.size.toFloat(),{raw ->
                 val count=raw.roundToInt()
                 values=List(count) { i -> values.getOrNull(i) ?: i.toString() }
@@ -36,7 +36,7 @@ internal fun SliderSettings(vm: RemoteViewModel) {
                         val slot=row*2+column
                         OutlinedTextField(text,{new -> values=values.mapIndexed { i,v -> if(i==slot)new else v }},
                             label={Text("第 ${slot+1} 档（0～1000）")},singleLine=true,
-                            isError=parsed[slot]==null || parsed[slot] !in 0..1000,
+                            isError=parsed[slot]==null || parsed[slot] !in 0..1000 || parsed.count { it==parsed[slot] }>1,
                             keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),
                             modifier=Modifier.weight(1f).testTag("slider-value-$index-$slot"))
                     }

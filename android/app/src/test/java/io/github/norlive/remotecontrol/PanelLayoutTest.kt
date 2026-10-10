@@ -6,6 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PanelLayoutTest {
+    @Test fun scalingPreservesAspectRatioAtMinimumAndCanvasLimit() {
+        assertEquals(1f,panelScale(.5f,300f,54f,160f,54f,800f,400f),.001f)
+        assertEquals(1.2f,panelScale(1.5f,200f,250f,160f,150f,800f,300f),.001f)
+        assertEquals(.6f,panelScale(.6f,300f,300f,160f,150f,800f,400f),.001f)
+    }
+
     @Test fun offsetUsesAvailableTopLeftRange() {
         assertEquals(
             PanelOffset(80f, 150f),

@@ -32,6 +32,12 @@ fun movePanelItem(
     )
 }
 
+fun panelScale(scale: Float,width: Float,height: Float,minWidth: Float,minHeight: Float,canvasWidth: Float,canvasHeight: Float): Float {
+    val maximum=minOf(canvasWidth/width,canvasHeight/height)
+    val minimum=maxOf(minWidth/width,minHeight/height).coerceAtMost(maximum)
+    return scale.coerceIn(minimum,maximum)
+}
+
 class LayoutEditSession(saved: Map<String, PanelPosition> = emptyMap(),savedScales: Map<String, Float> = emptyMap()) {
     var savedScales: Map<String, Float> = savedScales.toMap(); private set
     private var draftScales: Map<String, Float> = emptyMap()

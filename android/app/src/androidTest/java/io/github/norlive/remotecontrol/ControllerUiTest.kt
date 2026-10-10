@@ -206,7 +206,10 @@ class ControllerUiTest {
             assertNotNull(fresh.layoutPositions["leftPad"])
         }
         editLayout()
-        compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(1.3f) }
+        compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(1.5f) }
+        val large=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        val blue=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        assertEquals(large.width,blue.width,1f);assertEquals(large.height,blue.height,1f)
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
         compose.runOnIdle { assertEquals(.6f,model().layoutScales["leftPad"]!!,.001f) }
     }
