@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
     namespace = "io.github.norlive.remotecontrol"
     compileSdk = 35
-    defaultConfig { applicationId = "io.github.norlive.remotecontrol"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "1.0.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "io.github.norlive.remotecontrol"; minSdk = 26; targetSdk = 35; versionCode = 2; versionName = "1.1.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     val signingPath = System.getenv("RC_KEYSTORE")
     if (signingPath != null) signingConfigs.create("releaseKey") {
         storeFile = file(signingPath); storePassword = System.getenv("RC_STORE_PASSWORD")

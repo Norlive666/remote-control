@@ -44,12 +44,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
 
-private val Ink=Color(0xff233849)
-private val Muted=Color(0xff627789)
-private val Accent=Color(0xff159dc9)
-private val Surface=Color(0xfff4f7fa)
-private val Line=Color(0xffc7d5df)
-private val Pad=Color(0xffe5edf3)
+internal val Ink=Color(0xff233849)
+internal val Muted=Color(0xff627789)
+internal val Accent=Color(0xff159dc9)
+internal val Surface=Color(0xfff4f7fa)
+internal val Line=Color(0xffc7d5df)
+internal val Pad=Color(0xffe5edf3)
 
 class MainActivity : ComponentActivity() {
     private val model: RemoteViewModel by viewModels()
@@ -89,40 +89,8 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
             "enable" -> vm.enable(!state.enabled)
         }
     }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Surface).safeDrawingPadding()) {
-        val compact=maxHeight<370.dp
-        Column(Modifier.fillMaxSize().padding(horizontal=if(compact)20.dp else 28.dp,vertical=if(compact)8.dp else 16.dp)) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Text("ROBOT CONTROL",fontSize=10.sp,color=Muted,letterSpacing=2.sp)
-                    Text("操控面板",fontSize=if(compact)19.sp else 23.sp,fontWeight=FontWeight.Medium)
-                    Text(vm.status,fontSize=11.sp,color=Muted,maxLines=1)
-                }
-                Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                    vm.keys.filter { it.action!="hide" }.forEach { key ->
-                        KeyButton(key.label,key.action,key.action=="stop") { action(key.action) }
-                    }
-                    KeyButton("设置","settings") { settingsDialog=true }
-                }
-            }
-            Row(Modifier.weight(1f).fillMaxWidth().padding(top=if(compact)6.dp else 16.dp),horizontalArrangement=Arrangement.spacedBy(if(compact)20.dp else 32.dp),verticalAlignment=Alignment.CenterVertically) {
-                Channel("左摇杆","滑块 1",state.lx,state.ly,state.slider1,compact,Modifier.weight(1f),!state.stopped,{x,y->vm.axes(true,x,y)},{vm.slider(0,it)})
-                Column(Modifier.width(if(compact)70.dp else 88.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(if(compact)10.dp else 20.dp)) {
-                    Text(if(vm.mode==LinkMode.HC05)"HC-05" else "FSC-BT630",fontSize=12.sp,fontWeight=FontWeight.Medium,color=Muted)
-                    Column(horizontalAlignment=Alignment.CenterHorizontally) {
-                        Switch(state.enabled,{vm.enable(it)},enabled=vm.connected)
-                        Text(if(state.stopped)"急停锁定" else "使能",fontSize=12.sp,color=if(state.stopped)Color(0xffc83249)else Ink)
-                    }
-                    Text(if(vm.mode==LinkMode.HC05)"20 Hz" else "50 Hz",fontSize=11.sp,color=Muted)
-                }
-                Channel("右摇杆","滑块 2",state.rx,state.ry,state.slider2,compact,Modifier.weight(1f),!state.stopped,{x,y->vm.axes(false,x,y)},{vm.slider(1,it)})
-            }
-            HorizontalDivider(color=Line)
-            Row(Modifier.fillMaxWidth().padding(top=6.dp),horizontalArrangement=Arrangement.SpaceBetween) {
-                Text(vm.mode.title,fontSize=11.sp,color=Muted)
-                Text("已提交 ${vm.sent} 帧 · ${if(state.enabled)"使能开启" else "使能关闭"}",fontSize=11.sp,color=Muted)
-            }
-        }
+    EditablePanel(vm) { name ->
+        if(name=="settings")settingsDialog=true else if(!vm.layoutEditing)action(name)
     }
     if(connectionDialog) {
         AlertDialog(onDismissRequest={connectionDialog=false;vm.stopScan()},title={Text("蓝牙连接")},text={
@@ -141,33 +109,20 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
             Row { TextButton(systemBluetooth){Text("系统蓝牙")};if(vm.connected || vm.connecting)TextButton({vm.disconnect();connectionDialog=false}){Text("断开")} }
         })
     }
-    if(settingsDialog) SettingsDialog(vm) { settingsDialog=false }
+    if(settingsDialog) SettingsDialog(vm,onEdit={settingsDialog=false;vm.beginLayoutEdit()}) { settingsDialog=false }
 }
 
 @Composable
-private fun KeyButton(label: String,action: String,danger: Boolean=false,onClick: ()->Unit) {
+internal fun KeyButton(label: String,action: String,danger: Boolean=false,enabled: Boolean=true,onClick: ()->Unit) {
     val icon=when(action) {"connect"->Icons.Outlined.Bluetooth;"reset"->Icons.Outlined.Refresh;"stop"->Icons.Outlined.StopCircle;"enable"->Icons.Outlined.PowerSettingsNew;else->Icons.Outlined.Tune}
-    FilledTonalButton(onClick,shape=RoundedCornerShape(13.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp),colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color.White,contentColor=if(danger)Color(0xffc83249)else Ink),modifier=Modifier.widthIn(min=48.dp)) {
+    FilledTonalButton(onClick,enabled=enabled,shape=RoundedCornerShape(13.dp),contentPadding=PaddingValues(horizontal=10.dp,vertical=6.dp),colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color.White,contentColor=if(danger)Color(0xffc83249)else Ink),modifier=Modifier.widthIn(min=48.dp)) {
         Column(horizontalAlignment=Alignment.CenterHorizontally) { Icon(icon,contentDescription=null,modifier=Modifier.size(18.dp));Text(label,fontSize=11.sp,maxLines=1) }
-    }
-}
-
-@Composable
-private fun Channel(title: String,sliderTitle: String,x: Int,y: Int,value: Int,compact: Boolean,modifier: Modifier,active: Boolean,onMove: (Int,Int)->Unit,onSlider: (Int)->Unit) {
-    Column(modifier.fillMaxHeight(),horizontalAlignment=Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { Text(sliderTitle,fontSize=12.sp);Text("${value/10}",fontSize=12.sp,color=Accent,fontFamily=FontFamily.Monospace) }
-        Slider(value.toFloat(),{onSlider(it.roundToInt())},valueRange=0f..1000f,enabled=active,modifier=Modifier.testTag(sliderTitle).height(if(compact)30.dp else 42.dp))
-        Row(Modifier.fillMaxWidth().padding(bottom=5.dp),horizontalArrangement=Arrangement.SpaceBetween) {
-            Text(title,fontSize=12.sp);Text("X $x  Y $y",fontSize=11.sp,color=Muted,fontFamily=FontFamily.Monospace)
-        }
-        Box(Modifier.weight(1f).fillMaxWidth(),contentAlignment=Alignment.Center) { Joystick(title,x,y,active,onMove) }
-        if(!compact)Text("松手自动归中",fontSize=11.sp,color=Muted,modifier=Modifier.padding(top=5.dp,bottom=8.dp))
     }
 }
 
 /** Separate gesture scope per stick; a pointer never transfers from one stick to the other. */
 @Composable
-private fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,Int)->Unit) {
+internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,Int)->Unit) {
     val currentMove by rememberUpdatedState(onMove)
     BoxWithConstraints(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
         val side=minOf(maxWidth,maxHeight,260.dp)
@@ -198,12 +153,13 @@ private fun Joystick(label: String,x: Int,y: Int,active: Boolean,onMove: (Int,In
 }
 
 @Composable
-private fun SettingsDialog(vm: RemoteViewModel,onClose: ()->Unit) {
+private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Unit) {
     val labels=mapOf("connect" to "连接面板","reset" to "数值复位","stop" to "急停归零","enable" to "切换使能","hide" to "隐藏")
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth(.8f).heightIn(max=340.dp)) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose){Text("完成")} }
+                OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
                 vm.keys.forEachIndexed { i,key ->
                     var text by remember(i) { mutableStateOf(key.label) }
                     var expanded by remember { mutableStateOf(false) }

@@ -26,6 +26,15 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val adapter=(application.getSystemService(BluetoothManager::class.java))?.adapter
     private val main=Handler(Looper.getMainLooper())
     private val session=ControlSession()
+    private val layoutSession=LayoutEditSession(layoutIds.mapNotNull { id ->
+        if(!preferences.contains("layout.$id.x") || !preferences.contains("layout.$id.y"))null
+        else {
+            val x=preferences.getFloat("layout.$id.x",0f);val y=preferences.getFloat("layout.$id.y",0f)
+            if(x.isFinite() && y.isFinite())id to PanelPosition(x.coerceIn(0f,1f),y.coerceIn(0f,1f)) else null
+        }
+    }.toMap())
+    var layoutEditing by mutableStateOf(false); private set
+    var layoutPositions by mutableStateOf(layoutSession.positions); private set
     var controls by mutableStateOf(session.state); private set
     var mode by mutableStateOf(if(preferences.getString("mode","HC05")=="BT630")LinkMode.BT630 else LinkMode.HC05); private set
     var status by mutableStateOf("未连接"); private set
@@ -129,11 +138,26 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }
     fun foreground(value: Boolean) { foreground=value;if(!value)disconnect() }
-    fun axes(left: Boolean,x: Int,y: Int) { session.axes(left,x,y);sync() }
-    fun slider(index: Int,value: Int) { session.slider(index,value);sync() }
-    fun enable(value: Boolean) { if(value && (!connected || !foreground))return;session.enable(value);sync() }
+    fun axes(left: Boolean,x: Int,y: Int) { if(layoutEditing)return;session.axes(left,x,y);sync() }
+    fun slider(index: Int,value: Int) { if(layoutEditing)return;session.slider(index,value);sync() }
+    fun enable(value: Boolean) { if(value && (!connected || !foreground || layoutEditing))return;session.enable(value);sync() }
     fun stop() { session.stop();sync();status=if(connected)"急停已锁定 · 持续发送归零帧" else "急停已锁定" }
-    fun reset() { session.reset();sync() }
+    fun reset() { if(layoutEditing)return;session.reset();sync() }
+    fun beginLayoutEdit() {
+        if(layoutEditing)return
+        session.enable(false);sync();layoutSession.begin();syncLayout()
+    }
+    fun movePanel(id: String,position: PanelPosition) { layoutSession.move(id,position);syncLayout() }
+    fun saveLayoutEdit() {
+        layoutSession.save()
+        val editor=preferences.edit()
+        layoutIds.forEach { id -> editor.remove("layout.$id.x").remove("layout.$id.y") }
+        layoutSession.saved.forEach { (id,p) -> editor.putFloat("layout.$id.x",p.x).putFloat("layout.$id.y",p.y) }
+        editor.apply();syncLayout()
+    }
+    fun cancelLayoutEdit() { layoutSession.cancel();syncLayout() }
+    fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
+    private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions }
     private fun sync() { controls=session.state }
     fun setKey(index: Int,label: String,action: String) {
         if(action !in actions)return
@@ -142,5 +166,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         preferences.edit().putString("label$index",key.label).putString("action$index",key.action).apply()
     }
     override fun onCleared() { disconnect();super.onCleared() }
-    companion object { val actions=listOf("connect","reset","stop","enable","hide") }
+    companion object {
+        val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable","key0","key1","key2")
+        val actions=listOf("connect","reset","stop","enable","hide") }
 }
