@@ -123,11 +123,11 @@ class ControllerUiTest {
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
     }
     @Test fun controlsRenderAndStickCancellationReturnsToCenter() {
-        compose.onNodeWithTag("左摇杆").assertIsDisplayed()
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertIsDisplayed()
         compose.onNodeWithTag("右摇杆").assertIsDisplayed()
         compose.onNodeWithTag("滑块 1").assertIsDisplayed()
         compose.onNodeWithTag("滑块 2").assertIsDisplayed()
-        val left=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         val right=compose.onNodeWithTag("右摇杆").fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput {
             down(0,left.center);down(1,right.center)
@@ -135,54 +135,54 @@ class ControllerUiTest {
             updatePointerTo(1,Offset(right.left+right.width*.2f,right.top+right.height*.8f))
             move()
         }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 876",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 876",substring=true)
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -876",substring=true)
         compose.onRoot().performTouchInput { up(0) }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X -876",substring=true)
         compose.onRoot().performTouchInput { cancel() }
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
 
     }
     @Test fun layoutEditingMovesOnlyDraftAndKeepsAxesNeutral() {
-        val initial=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val initial=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("panel-settings").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
         compose.onNodeWithTag("move-leftPad").performTouchInput { swipe(center,center+Offset(45f,-25f)) }
-        val moved=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val moved=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         org.junit.Assert.assertTrue(moved.left>initial.left+15f)
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
-        val restored=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val restored=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         org.junit.Assert.assertEquals(initial.left,restored.left,2f)
     }
     @Test fun changingModeCancelsHeldGestureUntilFreshTouch() {
-        val left=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput { down(0,left.center);moveTo(0,Offset(left.left+left.width*.8f,left.center.y)) }
         compose.runOnIdle { assertTrue(model().controls.lx>0);model().cycleStickMode(0) }
         compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.9f,left.center.y)) }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.onRoot().performTouchInput { up(0) }
         compose.onRoot().performTouchInput { down(0,left.center);moveTo(0,Offset(left.left+left.width*.84f,left.center.y)) }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 1000，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 1000，Y 0",substring=true)
         compose.onRoot().performTouchInput { up(0) }
     }
     @Test fun deadZoneAndSingleAxisModeAreAppliedToTouchGestures() {
         compose.runOnIdle { model().setStickConfig(0,JoystickConfig(deadZonePercent=10,maxValue=500,mode=JoystickMode.HORIZONTAL)) }
-        val left=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput {
             down(0,left.center)
             updatePointerTo(0,Offset(left.left+left.width*.84f,left.top+left.height*.2f));move()
         }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 500，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 500，Y 0",substring=true)
         compose.onRoot().performTouchInput { up(0) }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.runOnIdle { model().setStickConfig(0,JoystickConfig(deadZonePercent=10)) }
         compose.onRoot().performTouchInput {
             down(0,Offset(left.center.x+left.width*.02f,left.center.y-left.height*.02f))
         }
-        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onNodeWithTag("左摇杆",useUnmergedTree=true).assertContentDescriptionContains("X 0，Y 0",substring=true)
         compose.onRoot().performTouchInput { cancel() }
     }
     @Test fun bluePadMovesWithoutMovingCardAndSizeIsSaved() {
@@ -197,7 +197,7 @@ class ControllerUiTest {
         compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(.6f) }
         val resized=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
         assertTrue(resized.width<moved.width*.8f)
-        val zone=compose.onNodeWithTag("pad-zone-0").fetchSemanticsNode().boundsInRoot
+        val zone=compose.onNodeWithTag("pad-zone-0",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         assertTrue(resized.left>=zone.left-1f && resized.right<=zone.right+1f)
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
         compose.runOnIdle {
@@ -208,7 +208,7 @@ class ControllerUiTest {
         editLayout()
         compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(1.5f) }
         val large=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
-        val blue=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        val blue=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         assertEquals(large.width,blue.width,1f);assertEquals(large.height,blue.height,1f)
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
         compose.runOnIdle { assertEquals(.6f,model().layoutScales["leftPad"]!!,.001f) }
