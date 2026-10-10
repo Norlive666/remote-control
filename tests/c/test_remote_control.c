@@ -78,6 +78,24 @@ int main(void) {
     fresh_reset(); uint8_t prefix[12] = {0xa5,0x5a,9,9,9,9,9,9,9,9,9,9};
     feed(prefix,sizeof prefix); feed(f,20);
     assert(state().sequence==7 && state().axes[0]==-1000);
+    /* Metadata changes only on accepted fresh frames or complete CRC failures. */
+    fresh_reset(); s=state(); assert(!s.link_valid && s.valid_frames==0 && s.crc_errors==0);
+    frame(f,40,1000,1000,1); feed(f,20);
+    s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==0 && s.sequence==40);
+    frame(f,41,1000,1000,0); feed(f,20); /* Valid CRC, invalid disabled payload. */
+    s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==0);
+    frame(f,41,0,0,1); f[2]=2; seal(f); feed(f,20);
+    frame(f,41,0,0,0x80); feed(f,20);
+    s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==0);
+    frame(f,41,0,0,1); f[4]^=1; feed(f,20); /* Complete frame with bad CRC. */
+    s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==1);
+    frame(f,40,1000,1000,1); feed(f,20); /* Duplicate. */
+    s=state(); assert(s.valid_frames==1 && s.crc_errors==1);
+    ticks(300); s=state(); assert(!s.link_valid && !s.enabled && s.valid_frames==1 && s.crc_errors==1);
+    frame(f,41,1000,1000,1); feed(f,20); assert(state().valid_frames==1);
+    frame(f,42,0,0,0); feed(f,20);
+    s=state(); assert(s.link_valid && !s.enabled && s.valid_frames==2 && s.crc_errors==1 && s.sequence==42);
+    fresh_reset(); s=state(); assert(!s.link_valid && s.valid_frames==0 && s.crc_errors==0);
     puts("remote control behavior: pass");
     return 0;
 }

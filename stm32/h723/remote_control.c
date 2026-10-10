@@ -21,11 +21,12 @@ static void neutral(void) {
     for (i=0;i<2;i++) g_rc.sliders[i]=0;
     g_rc.enabled=0;
     g_rc.stopped=1;
+    g_rc.link_valid=0;
 }
 void RC_Reset(void) {
     uint32_t key=lock();
     rx_count=0; have_seq=0; last_seq=0; expired=0; age_ms=0;
-    neutral(); g_rc.sequence=0;
+    neutral(); g_rc.sequence=0; g_rc.valid_frames=0; g_rc.crc_errors=0;
     unlock(key);
 }
 void RC_GetState(RC_State_t *out) {
@@ -34,6 +35,7 @@ void RC_GetState(RC_State_t *out) {
     for (i=0;i<4;i++) out->axes[i]=g_rc.axes[i];
     for (i=0;i<2;i++) out->sliders[i]=g_rc.sliders[i];
     out->enabled=g_rc.enabled; out->stopped=g_rc.stopped; out->sequence=g_rc.sequence;
+    out->link_valid=g_rc.link_valid; out->valid_frames=g_rc.valid_frames; out->crc_errors=g_rc.crc_errors;
     unlock(key);
 }
 void RC_Tick1ms(void) {
@@ -57,7 +59,7 @@ static uint16_t crc16(const uint8_t *p) {
 static int valid(const uint8_t *p) {
     unsigned i;
     int inactive;
-    if (p[0]!=0xa5 || p[1]!=0x5a || p[2]!=1 || (p[16]&~3u)!=0 || p[17]!=0 || le16(p+18)!=crc16(p)) return 0;
+    if (p[0]!=0xa5 || p[1]!=0x5a || p[2]!=1 || (p[16]&~3u)!=0 || p[17]!=0) return 0;
     inactive=((p[16]&1u)==0 || (p[16]&2u)!=0);
     for (i=0;i<4;i++) { int16_t v=signed_le16(p+4+2*i); if (v < -1000 || v > 1000 || (inactive && v!=0)) return 0; }
     for (i=0;i<2;i++) { uint16_t v=le16(p+12+2*i); if (v>1000 || (inactive && v!=0)) return 0; }
@@ -69,7 +71,7 @@ static void publish(const uint8_t *p) {
     if (expired && (flags&1u)) return; /* Recovery must begin with an explicit disabled frame. */
     if (!expired && have_seq && (delta==0 || delta>=128)) return;
     have_seq=1; last_seq=seq; expired=0; age_ms=0;
-    g_rc.sequence=seq;
+    g_rc.sequence=seq; g_rc.link_valid=1; g_rc.valid_frames++;
     g_rc.stopped=(uint8_t)((flags&2u)!=0);
     g_rc.enabled=(uint8_t)((flags&1u)!=0 && !g_rc.stopped);
     for (i=0;i<4;i++) g_rc.axes[i]=g_rc.enabled ? signed_le16(p+4+2*i) : 0;
@@ -81,7 +83,8 @@ void RC_ProcessByte(uint8_t byte) {
     if (rx_count==1) { if (byte==0x5a) {rx[1]=byte; rx_count=2;} else if (byte!=0xa5) rx_count=0; return; }
     rx[rx_count++]=byte;
     if (rx_count<20) return;
-    if (valid(rx)) { publish(rx); rx_count=0; return; }
+    if (le16(rx+18)!=crc16(rx)) g_rc.crc_errors++;
+    else if (valid(rx)) { publish(rx); rx_count=0; return; }
     for (i=1;i<19;i++) if (rx[i]==0xa5 && rx[i+1]==0x5a) break;
     if (i<19) { rx_count=(uint8_t)(20-i); memmove(rx,rx+i,rx_count); }
     else if (rx[19]==0xa5) { rx[0]=0xa5; rx_count=1; }

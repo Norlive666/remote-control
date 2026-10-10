@@ -14,6 +14,9 @@ typedef struct {
     uint8_t enabled;
     uint8_t stopped;
     uint8_t sequence;
+    uint8_t link_valid;
+    uint32_t valid_frames;
+    uint32_t crc_errors;
 } RC_State_t;
 extern volatile RC_State_t g_rc;
 HAL_StatusTypeDef RC_Init(void);
