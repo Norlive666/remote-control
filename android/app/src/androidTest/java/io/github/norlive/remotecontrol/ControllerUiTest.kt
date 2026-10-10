@@ -1,6 +1,7 @@
 package io.github.norlive.remotecontrol
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -73,13 +74,13 @@ class ControllerUiTest {
     }
     @Test fun stickSettingsApplyAndSurviveReload() {
         compose.onNodeWithTag("panel-settings").performClick()
-        compose.onNodeWithTag("stick-range-0").performScrollTo().performTextReplacement("255")
+        compose.onNodeWithTag("stick-deadzone-0").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(10f) }
+        compose.onNodeWithTag("stick-range-0").performScrollTo().performClick().performTextReplacement("255")
         compose.onNodeWithTag("stick-apply-0").performScrollTo().performClick()
-        compose.onNodeWithTag("stick-range-1").performScrollTo().performTextReplacement("0")
+        compose.onNodeWithTag("stick-range-1").performScrollTo().performClick().performTextReplacement("0")
         compose.onNodeWithTag("stick-apply-1").assertIsNotEnabled()
         compose.onNodeWithText("完成",useUnmergedTree=true).performScrollTo().performClick()
         compose.runOnIdle {
-            model().setStickConfig(0,model().stickConfigs[0].copy(deadZonePercent=10))
             model().axes(true,1000,80)
             assertEquals(255,model().controls.lx);assertEquals(0,model().controls.ly)
             val reloaded=RemoteViewModel(compose.activity.application)
@@ -153,6 +154,17 @@ class ControllerUiTest {
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
         val restored=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
         org.junit.Assert.assertEquals(initial.left,restored.left,2f)
+    }
+    @Test fun changingModeCancelsHeldGestureUntilFreshTouch() {
+        val left=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { down(0,left.center);moveTo(0,Offset(left.left+left.width*.8f,left.center.y)) }
+        compose.runOnIdle { assertTrue(model().controls.lx>0);model().cycleStickMode(0) }
+        compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.9f,left.center.y)) }
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onRoot().performTouchInput { up(0) }
+        compose.onRoot().performTouchInput { down(0,left.center);moveTo(0,Offset(left.left+left.width*.84f,left.center.y)) }
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 1000，Y 0",substring=true)
+        compose.onRoot().performTouchInput { up(0) }
     }
     @Test fun deadZoneAndSingleAxisModeAreAppliedToTouchGestures() {
         compose.runOnIdle { model().setStickConfig(0,JoystickConfig(deadZonePercent=10,maxValue=500,mode=JoystickMode.HORIZONTAL)) }
