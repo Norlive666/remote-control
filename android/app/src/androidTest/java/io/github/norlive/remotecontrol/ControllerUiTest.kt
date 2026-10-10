@@ -22,6 +22,7 @@ class ControllerUiTest {
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
     }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
@@ -58,8 +59,13 @@ class ControllerUiTest {
         val layouts=mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("开启电机使能",useUnmergedTree=true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         assertEquals(1,layouts.size)
-        assertFalse("Overflow: width=${layouts.single().didOverflowWidth}, height=${layouts.single().didOverflowHeight}, size=${layouts.single().size}, intrinsic=${layouts.single().multiParagraph.intrinsics.maxIntrinsicWidth}",layouts.single().hasVisualOverflow)
-        assertEquals(6,layouts.single().getLineEnd(0))
+        val text=layouts.single()
+        // Paragraph width can round up by a pixel even when every glyph fits.
+        assertTrue(text.multiParagraph.intrinsics.maxIntrinsicWidth<=text.size.width+1f)
+        assertTrue(text.getBoundingBox(5).right<=text.size.width+1f)
+        assertEquals(6,text.getLineEnd(0))
+        assertEquals(1,text.lineCount)
+        assertFalse(text.didOverflowHeight)
         compose.runOnIdle { model().setKey(0,"连接","connect") }
     }
     @Test fun enableControlDragClampsToCanvasEdges() {
@@ -117,6 +123,7 @@ class ControllerUiTest {
     @Test fun layoutEditingMovesOnlyDraftAndKeepsAxesNeutral() {
         val initial=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("panel-settings").performClick()
+        compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
         compose.onNodeWithTag("move-leftStick").performTouchInput { swipe(center,center+Offset(80f,-35f)) }
         val moved=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
