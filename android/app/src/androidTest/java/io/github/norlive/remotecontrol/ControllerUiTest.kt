@@ -52,6 +52,8 @@ class ControllerUiTest {
         assertTrue(slider.bottom<=left.top+2f)
         assertTrue(left.right<hub.left && hub.right<right.left)
         compose.onNodeWithTag("panel-settings").assertIsDisplayed()
+        compose.onNodeWithText("HC-05 · 经典蓝牙").assertDoesNotExist()
+        compose.onNodeWithText("已提交 0 帧 · 使能关闭").assertDoesNotExist()
     }
     @Test fun redundantButtonsAreRemovedAndModesCycleIndependently() {
         compose.onNodeWithText("连接",useUnmergedTree=true).assertDoesNotExist()

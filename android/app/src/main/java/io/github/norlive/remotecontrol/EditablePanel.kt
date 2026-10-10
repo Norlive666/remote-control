@@ -78,18 +78,15 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                     Spacer(Modifier.width(5.dp));Text("功能选项",fontSize=11.sp,maxLines=1)
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth().height(44.dp).softCard().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
-                if(vm.layoutEditing) {
+            if(vm.layoutEditing) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().height(44.dp).softCard().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
                     Text("拖动带框控件",fontSize=12.sp,color=Muted)
                     Row {
                         TextButton({vm.cancelLayoutEdit()}){Text("取消")}
                         TextButton({vm.defaultLayoutDraft()}){Text("恢复默认")}
                         TextButton({vm.saveLayoutEdit()}){Text("保存")}
                     }
-                } else {
-                    Text(vm.mode.title,fontSize=11.sp,color=Muted)
-                    Text("已提交 ${vm.sent} 帧 · ${if(vm.controls.enabled)"使能开启" else "使能关闭"}",fontSize=11.sp,color=Muted)
                 }
             }
         }
