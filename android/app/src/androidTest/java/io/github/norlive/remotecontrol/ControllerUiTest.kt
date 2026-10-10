@@ -33,6 +33,18 @@ class ControllerUiTest {
         compose.onNodeWithTag("右摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
 
     }
+    @Test fun layoutEditingMovesOnlyDraftAndKeepsAxesNeutral() {
+        val initial=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithText("设置",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("编辑布局").performClick()
+        compose.onNodeWithTag("move-leftStick").performTouchInput { swipe(center,center+Offset(80f,-35f)) }
+        val moved=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(moved.left>initial.left+30f)
+        compose.onNodeWithTag("左摇杆").assertContentDescriptionContains("X 0，Y 0",substring=true)
+        compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
+        val restored=compose.onNodeWithTag("左摇杆").fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertEquals(initial.left,restored.left,2f)
+    }
     @Test fun stopRemainsLatchedAcrossResetAndSettingsOpen() {
         compose.onNodeWithText("急停",useUnmergedTree=true).performClick()
         compose.onNodeWithText("急停锁定").assertIsDisplayed()
