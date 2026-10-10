@@ -25,7 +25,7 @@ static void neutral(void) {
 }
 void RC_Reset(void) {
     uint32_t key=lock();
-    rx_count=0; have_seq=0; last_seq=0; expired=0; age_ms=0;
+    rx_count=0; have_seq=0; last_seq=0; expired=1; age_ms=0;
     neutral(); g_rc.sequence=0; g_rc.valid_frames=0; g_rc.crc_errors=0;
     unlock(key);
 }
