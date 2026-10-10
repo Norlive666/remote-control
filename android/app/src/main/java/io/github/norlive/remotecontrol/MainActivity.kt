@@ -122,7 +122,7 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
     if(connectionDialog) {
         AlertDialog(onDismissRequest={connectionDialog=false;vm.stopScan()},title={Text("蓝牙连接")},text={
             Column(Modifier.heightIn(max=320.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { LinkMode.entries.forEach { mode -> FilterChip(vm.mode==mode,{vm.setMode(mode);scan()},label={Text(if(mode==LinkMode.HC05)"HC-05" else "BT630 BLE")}) } }
+                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { LinkMode.entries.forEach { mode -> FilterChip(vm.mode==mode,{vm.changeMode(mode);scan()},label={Text(if(mode==LinkMode.HC05)"HC-05" else "BT630 BLE")}) } }
                 Text(if(vm.mode==LinkMode.HC05)"先在系统蓝牙中配对 HC-05，再选择设备。" else "选择 BT630；连接时检查 FFF0 / FFF2 特征。",fontSize=12.sp)
                 Text(vm.status,fontSize=12.sp,color=Muted)
                 vm.devices.forEach { device ->

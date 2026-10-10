@@ -53,7 +53,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN)
         else if(mode==LinkMode.BT630) arrayOf(Manifest.permission.ACCESS_FINE_LOCATION) else emptyArray()
     fun error(message: String) { status=message }
-    fun setMode(value: LinkMode) {
+    fun changeMode(value: LinkMode) {
         if(mode==value)return
         disconnect();mode=value;devices=emptyList();preferences.edit().putString("mode",value.name).apply()
     }
