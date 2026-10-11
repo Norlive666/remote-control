@@ -55,7 +55,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         JoystickConfig(
             preferences.getInt("stick.$index.deadZone",5).coerceIn(0,30),
             preferences.getInt("stick.$index.range",1000).coerceIn(1,1000),
-            JoystickMode.entries.firstOrNull { it.name==preferences.getString("stick.$index.mode",null) } ?: JoystickMode.FREE)
+            preferences.getString("stick.$index.mode",null).let { saved ->
+                if(saved=="EIGHT_WAY")JoystickMode.FOUR_WAY
+                else JoystickMode.entries.firstOrNull { it.name==saved } ?: JoystickMode.FREE
+            })
     }); private set
     var sliderConfigs by mutableStateOf(List(2) { index ->
         val parsed=(preferences.getString("slider.$index.values","0,1,2") ?: "0,1,2").split(',').map { it.toIntOrNull() }

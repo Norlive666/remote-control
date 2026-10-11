@@ -53,19 +53,31 @@ class ControllerUiTest {
         compose.runOnIdle { assertEquals(LinkMode.BT630,model().mode);assertEquals(20L,model().mode.period) }
         compose.onNodeWithTag("link-mode-BLE_UART").performClick()
     }
-    @Test fun eightWayTouchSnapsAndReleaseZerosAndModeReloads() {
-        compose.runOnIdle { model().setStickConfig(0,JoystickConfig(mode=JoystickMode.EIGHT_WAY)) }
+    @Test fun fourWayTouchSnapsAndReleaseZerosAndModeReloads() {
+        compose.runOnIdle { model().setStickConfig(0,JoystickConfig(mode=JoystickMode.FOUR_WAY)) }
         val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput { down(0,Offset(left.left+left.width*.84f,left.top+left.height*.56f)) }
         compose.runOnIdle { assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly) }
         compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.99f,left.top+left.height*.32f)) }
         compose.runOnIdle { assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly) }
-        compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.8f,left.top+left.height*.2f)) }
-        compose.runOnIdle { assertEquals(707,model().controls.lx);assertEquals(707,model().controls.ly) }
+        compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.7f,left.top+left.height*.2f)) }
+        compose.runOnIdle { assertEquals(0,model().controls.lx);assertEquals(1000,model().controls.ly) }
         compose.onRoot().performTouchInput { up(0) }
         compose.runOnIdle {
             assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly)
-            assertEquals("EIGHT_WAY",RemoteViewModel(compose.activity.application).stickConfigs[0].mode.name)
+            assertEquals("FOUR_WAY",RemoteViewModel(compose.activity.application).stickConfigs[0].mode.name)
+        }
+    }
+    @Test fun legacyEightWayPreferenceBecomesFourWayAndKeepsParameters() {
+        compose.runOnIdle {
+            val prefs=compose.activity.application.getSharedPreferences("controller",0)
+            prefs.edit().putString("stick.0.mode","EIGHT_WAY").putInt("stick.0.deadZone",13).putInt("stick.0.range",255).commit()
+            val restored=RemoteViewModel(compose.activity.application).stickConfigs[0]
+            assertEquals("FOUR_WAY",restored.mode.name)
+            assertEquals(13,restored.deadZonePercent);assertEquals(255,restored.maxValue)
+            assertEquals(0 to -255,restored.map(1000,-1000))
+            val original=model().stickConfigs[0]
+            prefs.edit().putString("stick.0.mode",original.mode.name).putInt("stick.0.deadZone",original.deadZonePercent).putInt("stick.0.range",original.maxValue).commit()
         }
     }
     @Test fun bothSlidersShrinkAndExpandedPadSizePersists() {
@@ -186,7 +198,7 @@ class ControllerUiTest {
             assertEquals(0,model().controls.lx);assertEquals(-1000,model().controls.ly)
         }
         compose.onNodeWithTag("stick-mode-0").performClick()
-        compose.runOnIdle { assertEquals(JoystickMode.EIGHT_WAY,model().stickConfigs[0].mode) }
+        compose.runOnIdle { assertEquals(JoystickMode.FOUR_WAY,model().stickConfigs[0].mode) }
         compose.onNodeWithTag("stick-mode-0").performClick()
         compose.runOnIdle { assertEquals(JoystickMode.FREE,model().stickConfigs[0].mode) }
     }
@@ -247,7 +259,7 @@ class ControllerUiTest {
         val right=compose.onNodeWithTag("右摇杆").fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput {
             down(0,left.center);down(1,right.center)
-            updatePointerTo(0,Offset(left.left+left.width*.8f,left.top+left.height*.2f))
+            updatePointerTo(0,Offset(left.left+left.width*.7f,left.top+left.height*.2f))
             updatePointerTo(1,Offset(right.left+right.width*.2f,right.top+right.height*.8f))
             move()
         }
