@@ -58,6 +58,8 @@ class ControllerUiTest {
         val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput { down(0,Offset(left.left+left.width*.84f,left.top+left.height*.56f)) }
         compose.runOnIdle { assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly) }
+        compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.99f,left.top+left.height*.32f)) }
+        compose.runOnIdle { assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly) }
         compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.8f,left.top+left.height*.2f)) }
         compose.runOnIdle { assertEquals(707,model().controls.lx);assertEquals(707,model().controls.ly) }
         compose.onRoot().performTouchInput { up(0) }

@@ -16,6 +16,11 @@ class JoystickConfigTest {
         assertEquals(0 to -1000,config.map(200,-1000))
         assertEquals(707 to -707,config.map(800,-700))
     }
+    @Test fun eightWayKeepsDirectionBeyondFullForceRadius() {
+        assertEquals(1000 to 0,eightWay().map(1441,529))
+        assertEquals(0 to -1000,eightWay().map(529,-1441))
+        assertEquals(-1000 to 0,eightWay().map(-1441,-529))
+    }
     @Test fun eightWayUsesRadialDeadZoneAndContinuousForce() {
         val config=eightWay(10)
         assertEquals(0 to 0,config.map(60,60))
