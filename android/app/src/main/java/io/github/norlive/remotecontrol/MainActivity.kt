@@ -122,7 +122,7 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: Joysti
             .pointerInput(active,config) {
                 if(!active)return@pointerInput
                 fun update(position: Offset) {
-                    currentMove(((position.x-size.width/2f)/(size.width*.34f)*1000).roundToInt().coerceIn(-1000,1000),(-(position.y-size.height/2f)/(size.height*.34f)*1000).roundToInt().coerceIn(-1000,1000))
+                    currentMove(((position.x-size.width/2f)/(size.width*.34f)*1000).roundToInt(),(-(position.y-size.height/2f)/(size.height*.34f)*1000).roundToInt())
                 }
                 try {
                     awaitEachGesture {

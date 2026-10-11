@@ -15,7 +15,7 @@ data class JoystickConfig(val deadZonePercent: Int = 5,val maxValue: Int = 1000,
     init { require(deadZonePercent in 0..30);require(maxValue in 1..1000) }
     fun map(x: Int,y: Int): Pair<Int,Int> {
         if(mode==JoystickMode.EIGHT_WAY) {
-            val rawX=x.coerceIn(-1000,1000).toDouble();val rawY=y.coerceIn(-1000,1000).toDouble()
+            val rawX=x.toDouble();val rawY=y.toDouble()
             val distance=hypot(rawX,rawY).coerceAtMost(1000.0)
             val deadZone=deadZonePercent*10
             if(distance<=deadZone)return 0 to 0
