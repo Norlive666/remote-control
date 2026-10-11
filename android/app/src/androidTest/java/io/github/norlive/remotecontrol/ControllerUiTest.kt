@@ -127,6 +127,7 @@ class ControllerUiTest {
                 .putBoolean("layout.padCanvas",false)
                 .putFloat("layout.leftPad.x",.2f).putFloat("layout.leftPad.y",.8f).putFloat("layout.leftPad.scale",1.5f)
                 .putFloat("layout.rightPad.x",.8f).putFloat("layout.rightPad.y",.8f).putFloat("layout.rightPad.scale",1.5f).commit()
+            compose.activity.viewModelStore.clear()
         }
         compose.activityRule.scenario.recreate()
         compose.waitUntil(5000) { compose.activity.application.getSharedPreferences("controller",0).getBoolean("layout.padCanvas",false) }
