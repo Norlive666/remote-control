@@ -103,6 +103,24 @@ class ControllerUiTest {
         compose.onRoot().performTouchInput { up(0) }
         compose.runOnIdle { assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly) }
     }
+    @Test fun bothCardsCanMoveDownAndPadsCanMoveBelowCards() {
+        editLayout()
+        for(id in listOf("leftStick","rightStick")) {
+            val before=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
+            compose.onRoot().performTouchInput { swipe(Offset(before.left+15f,before.top+15f),Offset(before.left+15f,before.top+55f)) }
+            val after=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
+            assertTrue("$id can move down",after.top>before.top+15f)
+        }
+        compose.runOnIdle { model().movePanel("leftPad",PanelPosition(0f,1f));model().movePanel("rightPad",PanelPosition(1f,1f)) }
+        val canvas=compose.onNodeWithTag("panel-canvas").fetchSemanticsNode().boundsInRoot
+        for(id in listOf("leftPad","rightPad")) {
+            val pad=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
+            assertEquals(canvas.bottom,pad.bottom,2f)
+        }
+        compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
+        compose.activityRule.scenario.recreate()
+        compose.runOnIdle { assertEquals(1f,model().layoutPositions["leftPad"]!!.y,0f);assertEquals(1f,model().layoutPositions["rightPad"]!!.y,0f) }
+    }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()
         compose.runOnIdle { model().movePanel("leftStick",PanelPosition(.31f,.67f)) }
