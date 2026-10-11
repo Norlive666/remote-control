@@ -22,6 +22,9 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -36,11 +39,22 @@ import kotlin.math.roundToInt
 @Composable
 internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
     BackHandler(enabled=vm.layoutEditing) { vm.cancelLayoutEdit() }
+    var legacyCanvas by remember { mutableStateOf(Rect.Zero) }
+    var legacyPads by remember { mutableStateOf(emptyMap<String,Rect>()) }
+    LaunchedEffect(vm.padCanvas,legacyCanvas,legacyPads) {
+        if(!vm.padCanvas && legacyCanvas.width>0 && legacyPads.size==2) {
+            vm.migratePadPositions(legacyPads.mapValues { (_,rect) ->
+                PanelPosition(
+                    ((rect.left-legacyCanvas.left)/(legacyCanvas.width-rect.width).coerceAtLeast(1f)).coerceIn(0f,1f),
+                    ((rect.top-legacyCanvas.top)/(legacyCanvas.height-rect.height).coerceAtLeast(1f)).coerceIn(0f,1f))
+            })
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(Surface).safeDrawingPadding()) {
         val compact=maxHeight<370.dp
         val gap=if(compact)12.dp else 20.dp
         Column(Modifier.fillMaxSize().padding(horizontal=if(compact)10.dp else 16.dp,vertical=8.dp)) {
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("panel-canvas")) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("panel-canvas").onGloballyPositioned { legacyCanvas=it.boundsInRoot() }) {
                 val width=maxWidth;val height=maxHeight
                 val sliderHeight=if(compact)54.dp else 60.dp
                 val optionWidth=100.dp
@@ -50,6 +64,7 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 val middleX=columnWidth+gap
                 val rightX=width-columnWidth
                 val mainHeight=(height-mainY).coerceAtLeast(1.dp)
+                val stickHeight=if(vm.padCanvas)mainHeight*.8f else mainHeight
                 val hubHeight=minOf(if(compact)112.dp else 128.dp,(mainHeight-92.dp).coerceAtLeast(1.dp))
                 val hubY=mainY+44.dp+(mainHeight-44.dp-hubHeight-52.dp).coerceAtLeast(0.dp)/2
                 val state=vm.controls
@@ -62,11 +77,11 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 PositionedItem(vm,"rightSlider",width-sliderWidth,0.dp,sliderWidth,sliderHeight,canvasPx) {
                     SliderControl("滑块 2",state.slider2,active,vm.sliderConfigs[1]){vm.slider(1,it)}
                 }
-                PositionedItem(vm,"leftStick",0.dp,mainY,columnWidth,mainHeight,canvasPx) {
-                    StickControl(vm,"左摇杆",0,state.lx,state.ly,active,vm.stickConfigs[0],{vm.cycleStickMode(0)}){x,y->vm.axes(true,x,y)}
+                PositionedItem(vm,"leftStick",0.dp,mainY,columnWidth,stickHeight,canvasPx) {
+                    StickControl(vm,"左摇杆",0,state.lx,state.ly,active,vm.stickConfigs[0],{vm.cycleStickMode(0)},!vm.padCanvas,{legacyPads=legacyPads+("leftPad" to it)}){x,y->vm.axes(true,x,y)}
                 }
-                PositionedItem(vm,"rightStick",rightX,mainY,columnWidth,mainHeight,canvasPx) {
-                    StickControl(vm,"右摇杆",1,state.rx,state.ry,active,vm.stickConfigs[1],{vm.cycleStickMode(1)}){x,y->vm.axes(false,x,y)}
+                PositionedItem(vm,"rightStick",rightX,mainY,columnWidth,stickHeight,canvasPx) {
+                    StickControl(vm,"右摇杆",1,state.rx,state.ry,active,vm.stickConfigs[1],{vm.cycleStickMode(1)},!vm.padCanvas,{legacyPads=legacyPads+("rightPad" to it)}){x,y->vm.axes(false,x,y)}
                 }
                 Column(Modifier.offset(x=middleX,y=mainY).width(columnWidth),horizontalAlignment=Alignment.CenterHorizontally) {
                     Text("ROBOT CONTROL",fontSize=9.sp,color=Muted,letterSpacing=1.sp,fontWeight=FontWeight.Bold)
@@ -74,6 +89,22 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 }
                 PositionedItem(vm,"enable",middleX,hubY,columnWidth,hubHeight,canvasPx) {
                     BluetoothHub(vm){action("connect")}
+                }
+                if(vm.padCanvas)listOf("leftStick" to "leftPad","rightStick" to "rightPad").forEachIndexed { index,(cardId,padId) ->
+                    val cardScale=panelScale(vm.layoutScales[cardId] ?: 1f,columnWidth.value,stickHeight.value,columnWidth.value*.3f,stickHeight.value*.3f,width.value,height.value)
+                    val cardWidth=columnWidth*cardScale;val cardHeight=stickHeight*cardScale
+                    val defaultX=if(index==0)0.dp else rightX
+                    val cardPosition=vm.layoutPositions[cardId] ?: PanelPosition(
+                        (defaultX.value/(width-cardWidth).value.coerceAtLeast(1f)).coerceIn(0f,1f),
+                        (mainY.value/(height-cardHeight).value.coerceAtLeast(1f)).coerceIn(0f,1f))
+                    val cardOffset=panelOffset(cardPosition,width.value,height.value,cardWidth.value,cardHeight.value)
+                    val baseSide=minOf((columnWidth-20.dp).coerceAtLeast(1.dp),(mainHeight-76.dp).coerceAtLeast(1.dp),260.dp)*.75f*cardScale
+                    val padScale=panelScale(vm.layoutScales[padId] ?: 1f,baseSide.value,baseSide.value,baseSide.value*.3f,baseSide.value*.3f,width.value,height.value)
+                    val side=baseSide*padScale
+                    PositionedItem(vm,padId,(cardOffset.x+cardWidth.value/2-side.value/2).dp,(cardOffset.y+cardHeight.value/2-side.value/2).dp,baseSide,baseSide,canvasPx) {
+                        val config=vm.stickConfigs[index]
+                        Joystick(if(index==0)"左摇杆" else "右摇杆",if(index==0)state.lx else state.rx,if(index==0)state.ly else state.ry,active,config) { x,y -> vm.axes(index==0,x,y) }
+                    }
                 }
                 // Keep the fixed entry above movable controls so layout recovery is always reachable.
                 OutlinedButton({action("settings")},enabled=!vm.layoutEditing,shape=RoundedCornerShape(16.dp),
@@ -195,13 +226,13 @@ private fun SliderControl(title: String,value: Int,active: Boolean,config: Slide
 }
 
 @Composable
-private fun StickControl(vm: RemoteViewModel,title: String,index: Int,x: Int,y: Int,active: Boolean,config: JoystickConfig,onMode: ()->Unit,onMove: (Int,Int)->Unit) {
+private fun StickControl(vm: RemoteViewModel,title: String,index: Int,x: Int,y: Int,active: Boolean,config: JoystickConfig,onMode: ()->Unit,embedded: Boolean,onLegacyPad: (Rect)->Unit,onMove: (Int,Int)->Unit) {
     Column(Modifier.fillMaxSize().softCard().padding(10.dp)) {
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
             Text(title,fontSize=11.sp,fontWeight=FontWeight.Bold)
             Text("X $x  Y $y",fontSize=10.sp,color=Muted,fontFamily=FontFamily.Monospace)
         }
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical=5.dp).testTag("pad-zone-$index")) {
+        if(embedded)BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical=5.dp).testTag("pad-zone-$index")) {
             val id=if(index==0)"leftPad" else "rightPad"
             val density=LocalDensity.current
             val scale=vm.layoutScales[id] ?: 1f
@@ -216,12 +247,13 @@ private fun StickControl(vm: RemoteViewModel,title: String,index: Int,x: Int,y: 
                 val current=vm.layoutPositions[id] ?: PanelPosition(.5f,.5f)
                 vm.movePanel(id,movePanelItem(current,delta.x,delta.y,canvas.x,canvas.y,item,item))
             }
-            Box(Modifier.offset{IntOffset(offset.x.roundToInt(),offset.y.roundToInt())}.size(side).testTag("move-$id")
+            Box(Modifier.offset{IntOffset(offset.x.roundToInt(),offset.y.roundToInt())}.size(side).testTag("move-$id").onGloballyPositioned { onLegacyPad(it.boundsInRoot()) }
                 .then(if(vm.layoutEditing)Modifier.border(2.dp,Accent,RoundedCornerShape(22.dp)).clickable{vm.selectPanel(id)} else Modifier)
                 .pointerInput(id,vm.layoutEditing,canvas,item) {
                     if(vm.layoutEditing)detectDragGestures(onDragStart={vm.selectPanel(id)}) { change,delta -> change.consume();move(delta) }
                 }) { Joystick(title,x,y,active,config,onMove) }
         }
+        else Spacer(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
             Text("死区 ${config.deadZonePercent}% · ±${config.maxValue}",fontSize=9.sp,color=Muted)
             OutlinedButton(onMode,enabled=active,contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp),modifier=Modifier.height(32.dp).testTag("stick-mode-$index")) {

@@ -142,7 +142,7 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: Joysti
             }
             val knob=Offset(center.x+x/config.maxValue.toFloat()*size.width*.34f,center.y-y/config.maxValue.toFloat()*size.height*.34f)
             val radius=minOf(28.dp.toPx(),size.width*.15f)
-            drawCircle(Color.White,radius,knob);drawCircle(Brush.radialGradient(listOf(Color(0xff38bdf8),Accent,Color(0xff01579b)),center=knob-Offset(radius*.35f,radius*.35f),radius=radius*1.5f),radius-3.5.dp.toPx(),knob)
+            drawCircle(Color.White,radius,knob);drawCircle(Brush.radialGradient(listOf(Color(0xff38bdf8),Accent,Color(0xff01579b)),center=knob-Offset(radius*.35f,radius*.35f),radius=radius*1.5f),radius-minOf(3.5.dp.toPx(),radius*.25f),knob)
         }
     }
 }

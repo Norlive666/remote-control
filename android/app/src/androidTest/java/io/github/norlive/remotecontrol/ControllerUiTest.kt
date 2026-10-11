@@ -121,6 +121,22 @@ class ControllerUiTest {
         compose.activityRule.scenario.recreate()
         compose.runOnIdle { assertEquals(1f,model().layoutPositions["leftPad"]!!.y,0f);assertEquals(1f,model().layoutPositions["rightPad"]!!.y,0f) }
     }
+    @Test fun oldCardRelativePadPositionsMigrateWithoutOverlapping() {
+        compose.runOnIdle {
+            compose.activity.application.getSharedPreferences("controller",0).edit()
+                .putBoolean("layout.padCanvas",false)
+                .putFloat("layout.leftPad.x",.2f).putFloat("layout.leftPad.y",.8f)
+                .putFloat("layout.rightPad.x",.8f).putFloat("layout.rightPad.y",.8f).commit()
+        }
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(5000) { compose.activity.application.getSharedPreferences("controller",0).getBoolean("layout.padCanvas",false) }
+        val left=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        val right=compose.onNodeWithTag("move-rightPad").fetchSemanticsNode().boundsInRoot
+        assertTrue(left.right<right.left)
+        compose.runOnIdle { assertTrue(model().layoutPositions["leftPad"]!!.x<model().layoutPositions["rightPad"]!!.x) }
+        compose.activityRule.scenario.recreate()
+        compose.runOnIdle { assertTrue(model().layoutPositions["leftPad"]!!.x<model().layoutPositions["rightPad"]!!.x) }
+    }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()
         compose.runOnIdle { model().movePanel("leftStick",PanelPosition(.31f,.67f)) }
@@ -296,7 +312,7 @@ class ControllerUiTest {
         compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(.6f) }
         val resized=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
         assertTrue(resized.width<moved.width*.8f)
-        val zone=compose.onNodeWithTag("pad-zone-0",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
+        val zone=compose.onNodeWithTag("panel-canvas",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
         assertTrue(resized.left>=zone.left-1f && resized.right<=zone.right+1f)
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
         compose.runOnIdle {

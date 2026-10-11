@@ -40,6 +40,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var layoutPositions by mutableStateOf(layoutSession.positions); private set
     var layoutScales by mutableStateOf(layoutSession.scales); private set
     var selectedLayoutId by mutableStateOf("leftPad"); private set
+    var padCanvas by mutableStateOf(preferences.getBoolean("layout.padCanvas",false) || layoutSession.saved.keys.none { it=="leftPad" || it=="rightPad" }); private set
     var controls by mutableStateOf(session.state); private set
     var mode by mutableStateOf(LinkMode.entries.firstOrNull { it.name==preferences.getString("mode",null) } ?: LinkMode.BLE_UART); private set
     var status by mutableStateOf("未连接"); private set
@@ -179,7 +180,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         sync()
     }
     fun beginLayoutEdit() {
-        if(layoutEditing)return
+        if(layoutEditing || !padCanvas)return
         session.enable(false);sync();layoutSession.begin();syncLayout()
     }
     fun selectPanel(id: String) { if(layoutEditing && id in layoutIds)selectedLayoutId=id }
@@ -187,11 +188,17 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun movePanel(id: String,position: PanelPosition) { selectPanel(id);layoutSession.move(id,position);syncLayout() }
     fun saveLayoutEdit() {
         layoutSession.save()
-        val editor=preferences.edit()
+        val editor=preferences.edit().putBoolean("layout.padCanvas",padCanvas)
         layoutIds.forEach { id -> editor.remove("layout.$id.x").remove("layout.$id.y").remove("layout.$id.scale") }
         layoutSession.saved.forEach { (id,p) -> editor.putFloat("layout.$id.x",p.x).putFloat("layout.$id.y",p.y) }
         layoutSession.savedScales.forEach { (id,scale) -> editor.putFloat("layout.$id.scale",scale) }
         editor.apply();syncLayout()
+    }
+    fun migratePadPositions(converted: Map<String,PanelPosition>) {
+        if(padCanvas || layoutEditing)return
+        layoutSession.begin()
+        converted.forEach { (id,position) -> if(id in layoutSession.saved)layoutSession.move(id,position) }
+        layoutSession.save();padCanvas=true;saveLayoutEdit()
     }
     fun cancelLayoutEdit() { layoutSession.cancel();syncLayout() }
     fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
