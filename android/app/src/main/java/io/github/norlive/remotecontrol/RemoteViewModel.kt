@@ -194,10 +194,11 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         layoutSession.savedScales.forEach { (id,scale) -> editor.putFloat("layout.$id.scale",scale) }
         editor.apply();syncLayout()
     }
-    fun migratePadPositions(converted: Map<String,PanelPosition>) {
+    fun migratePadPositions(converted: Map<String,PanelPosition>,scales: Map<String,Float>) {
         if(padCanvas || layoutEditing)return
         layoutSession.begin()
         converted.forEach { (id,position) -> if(id in layoutSession.saved)layoutSession.move(id,position) }
+        scales.forEach { (id,scale) -> if(id in layoutSession.saved || id in layoutSession.savedScales)layoutSession.resize(id,scale) }
         layoutSession.save();padCanvas=true;saveLayoutEdit()
     }
     fun cancelLayoutEdit() { layoutSession.cancel();syncLayout() }

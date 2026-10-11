@@ -125,17 +125,17 @@ class ControllerUiTest {
         compose.runOnIdle {
             compose.activity.application.getSharedPreferences("controller",0).edit()
                 .putBoolean("layout.padCanvas",false)
-                .putFloat("layout.leftPad.x",.2f).putFloat("layout.leftPad.y",.8f)
-                .putFloat("layout.rightPad.x",.8f).putFloat("layout.rightPad.y",.8f).commit()
+                .putFloat("layout.leftPad.x",.2f).putFloat("layout.leftPad.y",.8f).putFloat("layout.leftPad.scale",1.5f)
+                .putFloat("layout.rightPad.x",.8f).putFloat("layout.rightPad.y",.8f).putFloat("layout.rightPad.scale",1.5f).commit()
         }
         compose.activityRule.scenario.recreate()
         compose.waitUntil(5000) { compose.activity.application.getSharedPreferences("controller",0).getBoolean("layout.padCanvas",false) }
         val left=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
         val right=compose.onNodeWithTag("move-rightPad").fetchSemanticsNode().boundsInRoot
         assertTrue(left.right<right.left)
-        compose.runOnIdle { assertTrue(model().layoutPositions["leftPad"]!!.x<model().layoutPositions["rightPad"]!!.x) }
+        compose.runOnIdle { assertTrue(model().layoutPositions["leftPad"]!!.x<model().layoutPositions["rightPad"]!!.x);assertTrue(model().layoutScales["leftPad"]!!<1.5f) }
         compose.activityRule.scenario.recreate()
-        compose.runOnIdle { assertTrue(model().layoutPositions["leftPad"]!!.x<model().layoutPositions["rightPad"]!!.x) }
+        compose.runOnIdle { assertTrue(model().layoutPositions["leftPad"]!!.x<model().layoutPositions["rightPad"]!!.x);assertTrue(model().layoutScales["leftPad"]!!<1.5f) }
     }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()

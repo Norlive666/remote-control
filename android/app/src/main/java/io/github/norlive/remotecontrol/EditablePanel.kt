@@ -41,13 +41,14 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
     BackHandler(enabled=vm.layoutEditing) { vm.cancelLayoutEdit() }
     var legacyCanvas by remember { mutableStateOf(Rect.Zero) }
     var legacyPads by remember { mutableStateOf(emptyMap<String,Rect>()) }
-    LaunchedEffect(vm.padCanvas,legacyCanvas,legacyPads) {
-        if(!vm.padCanvas && legacyCanvas.width>0 && legacyPads.size==2) {
+    var legacyPadBases by remember { mutableStateOf(emptyMap<String,Float>()) }
+    LaunchedEffect(vm.padCanvas,legacyCanvas,legacyPads,legacyPadBases) {
+        if(!vm.padCanvas && legacyCanvas.width>0 && legacyPads.size==2 && legacyPadBases.size==2) {
             vm.migratePadPositions(legacyPads.mapValues { (_,rect) ->
                 PanelPosition(
                     ((rect.left-legacyCanvas.left)/(legacyCanvas.width-rect.width).coerceAtLeast(1f)).coerceIn(0f,1f),
                     ((rect.top-legacyCanvas.top)/(legacyCanvas.height-rect.height).coerceAtLeast(1f)).coerceIn(0f,1f))
-            })
+            },legacyPads.mapValues { (id,rect) -> rect.width/legacyPadBases.getValue(id) })
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Surface).safeDrawingPadding()) {
@@ -71,6 +72,12 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 val active=!state.stopped && !vm.layoutEditing
                 val density=LocalDensity.current
                 val canvasPx=with(density){Offset(width.toPx(),height.toPx())}
+                val targetPadBases=listOf("leftStick" to "leftPad","rightStick" to "rightPad").associate { (cardId,padId) ->
+                    val nextHeight=mainHeight*.8f
+                    val cardScale=panelScale(vm.layoutScales[cardId] ?: 1f,columnWidth.value,nextHeight.value,columnWidth.value*.3f,nextHeight.value*.3f,width.value,height.value)
+                    padId to with(density){(minOf((columnWidth-20.dp).coerceAtLeast(1.dp),(mainHeight-76.dp).coerceAtLeast(1.dp),260.dp)*.75f*cardScale).toPx()}
+                }
+                LaunchedEffect(targetPadBases) { legacyPadBases=targetPadBases }
                 PositionedItem(vm,"leftSlider",0.dp,0.dp,sliderWidth,sliderHeight,canvasPx) {
                     SliderControl("滑块 1",state.slider1,active,vm.sliderConfigs[0]){vm.slider(0,it)}
                 }
@@ -101,7 +108,7 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                     val baseSide=minOf((columnWidth-20.dp).coerceAtLeast(1.dp),(mainHeight-76.dp).coerceAtLeast(1.dp),260.dp)*.75f*cardScale
                     val padScale=panelScale(vm.layoutScales[padId] ?: 1f,baseSide.value,baseSide.value,baseSide.value*.3f,baseSide.value*.3f,width.value,height.value)
                     val side=baseSide*padScale
-                    PositionedItem(vm,padId,(cardOffset.x+cardWidth.value/2-side.value/2).dp,(cardOffset.y+cardHeight.value/2-side.value/2).dp,baseSide,baseSide,canvasPx) {
+                    PositionedItem(vm,padId,(cardOffset.x+cardWidth.value/2-side.value/2).dp,(cardOffset.y+cardHeight.value/2-9f*cardScale-side.value/2).dp,baseSide,baseSide,canvasPx) {
                         val config=vm.stickConfigs[index]
                         Joystick(if(index==0)"左摇杆" else "右摇杆",if(index==0)state.lx else state.rx,if(index==0)state.ly else state.ry,active,config) { x,y -> vm.axes(index==0,x,y) }
                     }
