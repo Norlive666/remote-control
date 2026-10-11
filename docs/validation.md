@@ -1,3 +1,12 @@
+# v1.3.2 — 删除经典蓝牙
+
+- 删除 Android HC-05 经典 SPP 连接与界面选项，默认 BLE 串口 FFE0/FFE1、20 Hz；保留 BT630 FFF0/FFF2、50 Hz。
+- 旧 HC05 或空设置回落到 BLE 串口；其他设置与 STM32 协议不变。
+- 回归测试先在旧代码失败：预期 BLE_UART，实际 HC05（运行 38104475361）。
+- [正式验证运行 38104890988](https://github.com/Norlive666/remote-control/actions/runs/38104890988)，构建提交 `1be51a25c4798597803c5e431a8489ff3fa809f6`：30 单元测试、14 Android 15 横屏界面测试全部通过；两套 MCU 主机测试与目标编译通过。独立代码复核无重要问题。
+- 本机签名 APK：versionCode 6；SHA256 `395d2e35bc0abe8ddaae908a2ed5c3644bcaa22bc7a569e65203b28fd00e2518`；原证书 `27a45a0d6cddcf3952d44cd114034833a245a8029af3fd355b6c1a9eb7563935`，v2/v3 验证通过。密钥仍仅在本机。
+- 用户报告 v1.3.1 BLE 串口可连接；v1.3.2 未在真实手机与模块验证，STM32 实际收包仍需用户测试。
+
 # v1.3.1 验证记录
 
 增加BLE串口模式：FFE0服务、FFE1收发、20Hz；保留HC-05经典SPP20Hz与BT630 FFF0/FFF2 50Hz。BLE模式覆盖Android8–11定位权限，保存模式时兼容旧设置。HC05模式遇到仅LE设备提示切换。
