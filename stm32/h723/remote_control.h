@@ -19,6 +19,10 @@ typedef struct {
     uint32_t crc_errors;
 } RC_State_t;
 extern volatile RC_State_t g_rc;
+/* Call after HAL_Init/SystemClock_Config. Owns USART1 PA9/PA10 and TIM4.
+ * HAL_BUSY: peripheral clock/IRQ already enabled; no state is changed.
+ * Same-baud repeated Init is a no-op; different baud returns HAL_BUSY.
+ * UART/TIM HAL modules and generated peripheral/IRQ files are not required. */
 HAL_StatusTypeDef RC_Init(void);
 HAL_StatusTypeDef RC_InitBT630(void);
 HAL_StatusTypeDef RC_InitBaud(uint32_t baud);

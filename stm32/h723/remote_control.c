@@ -6,8 +6,6 @@ static uint8_t rx[20], rx_count, have_seq, last_seq, expired;
 static uint16_t age_ms;
 
 #ifndef RC_HOST_TEST
-static UART_HandleTypeDef uart;
-static TIM_HandleTypeDef timer;
 static uint32_t lock(void) { uint32_t key=__get_PRIMASK(); __disable_irq(); return key; }
 static void unlock(uint32_t key) { __set_PRIMASK(key); }
 #else
@@ -96,6 +94,17 @@ void RC_ProcessByte(uint8_t byte) {
 }
 
 #ifndef RC_HOST_TEST
+#ifdef RC_H723
+#define RC_VECTOR_COUNT (16u + (unsigned)TIM24_IRQn + 1u)
+static uint32_t vectors[RC_VECTOR_COUNT] __ALIGNED(1024);
+#else
+#define RC_VECTOR_COUNT (16u + (unsigned)USBWakeUp_IRQn + 1u)
+static uint32_t vectors[RC_VECTOR_COUNT] __ALIGNED(256);
+#endif
+static uint32_t initialized_baud;
+static void uart_irq(void);
+static void timer_irq(void);
+
 static uint32_t timer_clock(void) {
     RCC_ClkInitTypeDef cfg;
     uint32_t latency, pclk;
@@ -110,61 +119,106 @@ static uint32_t timer_clock(void) {
     return pclk * (cfg.APB1CLKDivider==RCC_HCLK_DIV1 ? 1u : 2u);
 #endif
 }
+static int occupied(void) {
+    if (RCC->APB2ENR & RCC_APB2ENR_USART1EN) return 1;
+#ifdef RC_H723
+    if (RCC->APB1LENR & RCC_APB1LENR_TIM4EN) return 1;
+#else
+    if (RCC->APB1ENR & RCC_APB1ENR_TIM4EN) return 1;
+    /* A remapped USART1 cannot use PA9/PA10 without changing shared AFIO state. */
+    if ((RCC->APB2ENR & RCC_APB2ENR_AFIOEN) && (AFIO->MAPR & AFIO_MAPR_USART1_REMAP)) return 1;
+#endif
+    return NVIC_GetEnableIRQ(USART1_IRQn) || NVIC_GetEnableIRQ(TIM4_IRQn);
+}
+static void install_vectors(void) {
+    const uint32_t *original=(const uint32_t *)(uintptr_t)SCB->VTOR;
+    unsigned i;
+    for (i=0;i<RC_VECTOR_COUNT;i++) vectors[i]=original[i];
+    vectors[16u+USART1_IRQn]=(uint32_t)(uintptr_t)uart_irq;
+    vectors[16u+TIM4_IRQn]=(uint32_t)(uintptr_t)timer_irq;
+#ifdef RC_H723
+    if (SCB->CCR & SCB_CCR_DC_Msk) SCB_CleanDCache_by_Addr(vectors,(int32_t)sizeof(vectors));
+#endif
+    __DSB();
+    SCB->VTOR=(uint32_t)(uintptr_t)vectors;
+    __DSB(); __ISB();
+}
 HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
-    GPIO_InitTypeDef gpio={0};
-    uint32_t clock, divisor, period;
+    uint32_t clock, uart_clock, divisor, period, brr, key;
+    HAL_StatusTypeDef result;
+#ifdef RC_F103
+    uint32_t afio_enabled;
+#endif
     if (baud==0) return HAL_ERROR;
-    RC_Reset();
-    __HAL_RCC_GPIOA_CLK_ENABLE(); __HAL_RCC_USART1_CLK_ENABLE(); __HAL_RCC_TIM4_CLK_ENABLE();
-    gpio.Pin=GPIO_PIN_9;
+    key=lock();
+    if (initialized_baud) {
+        result=baud==initialized_baud ? HAL_OK : HAL_BUSY;
+        unlock(key); return result;
+    }
+    if (occupied()) { unlock(key); return HAL_BUSY; }
 #ifdef RC_H723
-    gpio.Mode=GPIO_MODE_AF_PP; gpio.Pull=GPIO_NOPULL; gpio.Speed=GPIO_SPEED_FREQ_LOW; gpio.Alternate=GPIO_AF7_USART1;
+    uart_clock=HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART1);
 #else
-    gpio.Mode=GPIO_MODE_AF_PP; gpio.Speed=GPIO_SPEED_FREQ_HIGH;
+    uart_clock=HAL_RCC_GetPCLK2Freq();
 #endif
-    HAL_GPIO_Init(GPIOA,&gpio);
-    gpio.Pin=GPIO_PIN_10;
-#ifdef RC_H723
-    gpio.Mode=GPIO_MODE_AF_PP; gpio.Pull=GPIO_PULLUP;
-#else
-    gpio.Mode=GPIO_MODE_INPUT; gpio.Pull=GPIO_PULLUP;
-#endif
-    HAL_GPIO_Init(GPIOA,&gpio);
-    uart.Instance=USART1; uart.Init.BaudRate=baud; uart.Init.WordLength=UART_WORDLENGTH_8B;
-    uart.Init.StopBits=UART_STOPBITS_1; uart.Init.Parity=UART_PARITY_NONE;
-    uart.Init.Mode=UART_MODE_TX_RX; uart.Init.HwFlowCtl=UART_HWCONTROL_NONE;
-    uart.Init.OverSampling=UART_OVERSAMPLING_16;
-#ifdef RC_H723
-    uart.Init.OneBitSampling=UART_ONE_BIT_SAMPLE_DISABLE;
-    uart.Init.ClockPrescaler=UART_PRESCALER_DIV1;
-    uart.AdvancedInit.AdvFeatureInit=UART_ADVFEATURE_NO_INIT;
-#endif
-    if (HAL_UART_Init(&uart)!=HAL_OK) return HAL_ERROR;
     clock=timer_clock();
+    brr=(uint32_t)(((uint64_t)uart_clock+baud/2u)/baud);
     divisor=(clock+999999u)/1000000u;
-    if (divisor==0 || divisor>65536u) return HAL_ERROR;
+    if (brr<16u || brr>65535u || divisor==0 || divisor>65536u) { unlock(key); return HAL_ERROR; }
     period=(clock+divisor*500u)/(divisor*1000u);
-    if (period==0 || period>65536u) return HAL_ERROR;
-    timer.Instance=TIM4; timer.Init.Prescaler=divisor-1u; timer.Init.Period=period-1u;
-    timer.Init.CounterMode=TIM_COUNTERMODE_UP; timer.Init.ClockDivision=TIM_CLOCKDIVISION_DIV1;
-#ifdef RC_H723
-    timer.Init.AutoReloadPreload=TIM_AUTORELOAD_PRELOAD_DISABLE;
+    if (period==0 || period>65536u) { unlock(key); return HAL_ERROR; }
+
+#ifdef RC_F103
+    /* Inspect the retained remap with AFIO clocked; never rewrite MAPR/SWJ_CFG. */
+    afio_enabled=RCC->APB2ENR & RCC_APB2ENR_AFIOEN;
+    __HAL_RCC_AFIO_CLK_ENABLE();
+    if (AFIO->MAPR & AFIO_MAPR_USART1_REMAP) {
+        if (!afio_enabled) CLEAR_BIT(RCC->APB2ENR,RCC_APB2ENR_AFIOEN);
+        unlock(key); return HAL_BUSY;
+    }
 #endif
-    if (HAL_TIM_Base_Init(&timer)!=HAL_OK) return HAL_ERROR;
-    __HAL_TIM_CLEAR_FLAG(&timer,TIM_FLAG_UPDATE);
-    __HAL_TIM_ENABLE_IT(&timer,TIM_IT_UPDATE);
+    __HAL_RCC_GPIOA_CLK_ENABLE(); __HAL_RCC_USART1_CLK_ENABLE(); __HAL_RCC_TIM4_CLK_ENABLE();
 #ifdef RC_H723
-    SET_BIT(USART1->CR1,USART_CR1_RXNEIE_RXFNEIE);
+    MODIFY_REG(GPIOA->OTYPER,(1u<<9)|(1u<<10),0);
+    MODIFY_REG(GPIOA->OSPEEDR,15u<<18,0);
+    MODIFY_REG(GPIOA->PUPDR,15u<<18,4u<<18); /* RX pull-up, TX no pull. */
+    MODIFY_REG(GPIOA->AFR[1],0xff0u,0x770u); /* AF7 on PA9/PA10. */
+    MODIFY_REG(GPIOA->MODER,15u<<18,10u<<18);
 #else
-    SET_BIT(USART1->CR1,USART_CR1_RXNEIE);
+    MODIFY_REG(GPIOA->CRH,0xff0u,0x8b0u); /* PA9 AF push-pull; PA10 input pull-up. */
+    GPIOA->BSRR=1u<<10;
 #endif
-    HAL_NVIC_SetPriority(USART1_IRQn,5,0); HAL_NVIC_EnableIRQ(USART1_IRQn);
-    HAL_NVIC_SetPriority(TIM4_IRQn,5,0); HAL_NVIC_EnableIRQ(TIM4_IRQn);
-    return HAL_TIM_Base_Start(&timer);
+    USART1->CR1=0; USART1->CR2=0; USART1->CR3=0;
+#ifdef RC_H723
+    USART1->PRESC=0;
+    USART1->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
+    USART1->RQR=USART_RQR_RXFRQ;
+#else
+    (void)USART1->SR; (void)USART1->DR;
+#endif
+    USART1->BRR=brr;
+    TIM4->CR1=0; TIM4->CR2=0; TIM4->SMCR=0; TIM4->DIER=0; TIM4->CCER=0;
+    TIM4->PSC=divisor-1u; TIM4->ARR=period-1u;
+    TIM4->EGR=TIM_EGR_UG; TIM4->SR=0; TIM4->CNT=0;
+    RC_Reset();
+    install_vectors();
+    NVIC_ClearPendingIRQ(USART1_IRQn); NVIC_ClearPendingIRQ(TIM4_IRQn);
+    NVIC_SetPriority(USART1_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
+    NVIC_SetPriority(TIM4_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
+#ifdef RC_H723
+    USART1->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE_RXFNEIE;
+#else
+    USART1->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE;
+#endif
+    TIM4->DIER=TIM_DIER_UIE; TIM4->CR1=TIM_CR1_CEN;
+    initialized_baud=baud;
+    NVIC_EnableIRQ(USART1_IRQn); NVIC_EnableIRQ(TIM4_IRQn);
+    unlock(key);
+    return HAL_OK;
 }
 HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(9600); }
 HAL_StatusTypeDef RC_InitBT630(void) { return RC_InitBaud(115200); }
-void USART1_IRQHandler(void) {
+static void uart_irq(void) {
 #ifdef RC_H723
     uint32_t isr=USART1->ISR;
     if (isr & USART_ISR_RXNE_RXFNE) {
@@ -180,9 +234,9 @@ void USART1_IRQHandler(void) {
     }
 #endif
 }
-void TIM4_IRQHandler(void) {
-    if (__HAL_TIM_GET_FLAG(&timer,TIM_FLAG_UPDATE) && __HAL_TIM_GET_IT_SOURCE(&timer,TIM_IT_UPDATE)) {
-        __HAL_TIM_CLEAR_IT(&timer,TIM_IT_UPDATE);
+static void timer_irq(void) {
+    if ((TIM4->SR & TIM_SR_UIF) && (TIM4->DIER & TIM_DIER_UIE)) {
+        TIM4->SR=~(uint32_t)TIM_SR_UIF;
         RC_Tick1ms();
     }
 }

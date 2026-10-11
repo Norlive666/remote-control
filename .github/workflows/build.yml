@@ -45,7 +45,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-dev
       - name: Matching ST dependencies
         run: tools/fetch-stm32-deps.sh "$RUNNER_TEMP/stm32-deps"
-      - name: Compile both MCU drivers
+      - name: Driver initialization and private interrupts
+        env:
+          STM32_H7_CUBE_DIR: ${{ runner.temp }}/stm32-deps/H7
+          STM32_F1_CUBE_DIR: ${{ runner.temp }}/stm32-deps/F1
+        run: tests/c/run-hardware.sh
+      - name: Compile and link both MCU drivers
         env:
           STM32_H7_CUBE_DIR: ${{ runner.temp }}/stm32-deps/H7
           STM32_F1_CUBE_DIR: ${{ runner.temp }}/stm32-deps/F1
