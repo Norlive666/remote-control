@@ -81,13 +81,25 @@ class ControllerUiTest {
         compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(.3f) }
         val small=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
         assertTrue(small.width<big.width*.3f)
+        compose.runOnIdle { model().selectPanel("rightPad");model().resizePanel(2f) }
         compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
         compose.activityRule.scenario.recreate()
         compose.runOnIdle {
+            assertEquals(2f,model().layoutScales["rightPad"]!!,.001f)
             assertEquals(.35f,model().layoutScales["leftSlider"]!!,.001f)
             assertEquals(.45f,model().layoutScales["rightSlider"]!!,.001f)
             assertEquals(.3f,model().layoutScales["leftPad"]!!,.001f)
         }
+    }
+    @Test fun scaledStickStillMapsTouchAndReleaseCorrectly() {
+        editLayout()
+        compose.runOnIdle { model().selectPanel("leftStick");model().resizePanel(.6f) }
+        compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
+        val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { down(0,Offset(left.left+left.width*.84f,left.center.y)) }
+        compose.runOnIdle { assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly) }
+        compose.onRoot().performTouchInput { up(0) }
+        compose.runOnIdle { assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly) }
     }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()

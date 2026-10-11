@@ -93,7 +93,10 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                         DropdownMenu(expanded,{expanded=false}) { names.forEach { (id,name)->DropdownMenuItem(text={Text(name)},onClick={vm.selectPanel(id);expanded=false}) } }
                     }
                     Slider(vm.layoutScales[vm.selectedLayoutId] ?: 1f,{vm.resizePanel(it)},valueRange=.3f..2.5f,modifier=Modifier.weight(1f).height(32.dp).testTag("layout-size"))
-                    Text("${((vm.layoutScales[vm.selectedLayoutId] ?: 1f)*100).roundToInt()}%",fontSize=10.sp)
+                    Column(horizontalAlignment=Alignment.CenterHorizontally) {
+                        Text("${((vm.layoutScales[vm.selectedLayoutId] ?: 1f)*100).roundToInt()}%",fontSize=10.sp)
+                        Text("最大受边界限制",fontSize=8.sp,color=Muted)
+                    }
                     Row {
                         TextButton({vm.cancelLayoutEdit()}){Text("取消")}
                         TextButton({vm.defaultLayoutDraft()}){Text("恢复默认")}
