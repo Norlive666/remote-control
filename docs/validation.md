@@ -6,6 +6,7 @@
 - 25 个初始化/中断主机模拟场景通过，覆盖两个目标的占用、参数/时钟错误、9600/115200、PRIMASK 保留、向量入口保留、H7 cache-clean 分支、APB/TIMPRE、幂等调用、实际驱动 ISR 收包和 300 tick 断连归零。使用官方设备寄存器结构；CMSIS、时钟查询和寄存器内存由测试替身提供，不模拟硬件自动位清除或真实缓存。两套原协议测试通过。
 - 新增回归先发现 F103 在 AFIO 时钟关闭但存在保留重映射时误返回 HAL_OK；修复后该场景通过。原驱动在最少 HAL 模块配置下无法编译，新驱动通过。
 - F103 既有 HC-05/OLED 工程的临时副本替换这两个文件，移除 HAL UART/TIM 模块及源文件后完整构建、链接通过。FLASH 14400 B、RAM 3312 B；符号表存在私有 uart_irq/timer_irq 和对齐 RAM vectors，无 HAL_UART/HAL_TIM 符号。保留原 OLED_Data.c 的既有初始化器警告，未修改实际用户工程或烧录。
+- [GitHub STM32 验证任务 38138926767](https://github.com/Norlive666/remote-control/actions/runs/38138926767) 已通过，对应源码提交 `ec96237ddfb7c5f8f72f355151e45120d058d830`；本条只记录 STM32 任务结果。驱动 ZIP 发布在 [stm32-v2.0.0](https://github.com/Norlive666/remote-control/releases/tag/stm32-v2.0.0)，GitHub 资产 SHA256 与本机一致：`3aa502ed92cf647c903256fe7fe6213923086825d18f84d50c8bfad5e43abe1e`。
 - 独立代码审阅未发现未处理的重要问题。Android App 和 20 字节协议未修改，APK 继续使用 v1.4.0。
 - 尚未验证真实 F103/H723 的 UART 接收、TIM4 时序、向量迁移、缓存和无线链路；以上编译、链接及模拟测试不能替代开发板运行。
 
