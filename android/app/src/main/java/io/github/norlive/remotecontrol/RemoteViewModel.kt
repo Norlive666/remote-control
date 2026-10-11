@@ -17,7 +17,7 @@ import kotlinx.coroutines.*
 import kotlin.math.roundToInt
 import java.io.IOException
 
-enum class LinkMode(val title: String, val period: Long) { HC05("HC-05 · 经典蓝牙",50), BT630("BT630 · BLE",20) }
+enum class LinkMode(val title: String, val period: Long) { HC05("HC-05 · 经典蓝牙",50), BT630("BT630 · BLE",20), BLE_UART("BLE 串口 · FFE0/FFE1",50) }
 data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice)
 
 @SuppressLint("MissingPermission")
@@ -41,7 +41,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var layoutScales by mutableStateOf(layoutSession.scales); private set
     var selectedLayoutId by mutableStateOf("leftPad"); private set
     var controls by mutableStateOf(session.state); private set
-    var mode by mutableStateOf(if(preferences.getString("mode","HC05")=="BT630")LinkMode.BT630 else LinkMode.HC05); private set
+    var mode by mutableStateOf(LinkMode.entries.firstOrNull { it.name==preferences.getString("mode","HC05") } ?: LinkMode.HC05); private set
     var status by mutableStateOf("未连接"); private set
     var connected by mutableStateOf(false); private set
     var connecting by mutableStateOf(false); private set
@@ -74,7 +74,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     fun permissions(): Array<String> = if(android.os.Build.VERSION.SDK_INT>=31)
         arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN)
-        else if(mode==LinkMode.BT630) arrayOf(Manifest.permission.ACCESS_FINE_LOCATION) else emptyArray()
+        else if(mode!=LinkMode.HC05) arrayOf(Manifest.permission.ACCESS_FINE_LOCATION) else emptyArray()
     fun error(message: String) { status=message }
     fun changeMode(value: LinkMode) {
         if(mode==value)return
@@ -113,10 +113,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun connect(row: DeviceRow) {
         disconnect();if(!foreground)return
         if(adapter?.isEnabled!=true){status="请先开启手机蓝牙";return}
+        if(mode==LinkMode.HC05 && row.device.type==BluetoothDevice.DEVICE_TYPE_LE) {
+            status="该设备是 BLE，请切换 BLE 串口模式后扫描连接";return
+        }
         val token=generation
-        val link=if(mode==LinkMode.HC05)ClassicTransport() else Bt630Transport(getApplication(),
+        val link=if(mode==LinkMode.HC05)ClassicTransport() else BleUartTransport(getApplication(),
             lost={ main.post { if(token==generation && connected) fail("蓝牙连接已断开") } },
-            received={ bytes -> main.post { if(token==generation)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } } })
+            received={ bytes -> main.post { if(token==generation)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } } },generic=mode==LinkMode.BLE_UART)
         transport=link;lastReceived="—";connecting=true;status="连接 ${row.name}…"
         adapter.cancelDiscovery()
         connectJob=viewModelScope.launch {

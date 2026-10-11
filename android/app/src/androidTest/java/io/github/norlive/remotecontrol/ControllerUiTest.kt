@@ -5,6 +5,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.rule.GrantPermissionRule
+import android.Manifest
+import android.os.Build
 import androidx.lifecycle.ViewModelProvider
 import org.junit.Before
 import org.junit.Assert.*
@@ -14,10 +17,11 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ControllerUiTest {
+    @get:Rule val permissions=GrantPermissionRule.grant(*if(Build.VERSION.SDK_INT>=31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig()) } }
+        compose.runOnIdle { model().apply { changeMode(LinkMode.HC05);beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig()) } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -26,17 +30,17 @@ class ControllerUiTest {
     }
     @Test fun bleUartModeIsSelectableAndSurvivesReload() {
         compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
-        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).performClick()
-        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).assertIsSelected()
+        compose.onNodeWithTag("link-mode-BLE_UART").performClick()
+        compose.onNodeWithTag("link-mode-BLE_UART").assertIsSelected()
         compose.runOnIdle {
             assertEquals(LinkMode.BLE_UART,model().mode)
             assertEquals(50L,model().mode.period)
             assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
         }
-        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
-        compose.onNodeWithText("BT630 BLE",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("link-mode-HC05").performClick()
+        compose.onNodeWithTag("link-mode-BT630").performClick()
         compose.runOnIdle { assertEquals(LinkMode.BT630,model().mode);assertEquals(20L,model().mode.period) }
-        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("link-mode-HC05").performClick()
     }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()

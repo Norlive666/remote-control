@@ -41,9 +41,9 @@ class ClassicTransport : BluetoothTransport {
     }
 }
 
-/** Nordic owns GATT operation serialization; only one control write is submitted at a time. */
+/** Nordic serializes GATT writes for BT630 and FFE0/FFE1 UART modules. */
 @SuppressLint("MissingPermission")
-class Bt630Transport(context: Context, private val lost: () -> Unit, private val received: (ByteArray) -> Unit) : BleManager(context), BluetoothTransport {
+class BleUartTransport(context: Context, private val lost: () -> Unit, private val received: (ByteArray) -> Unit, private val generic: Boolean) : BleManager(context), BluetoothTransport {
     private var tx: BluetoothGattCharacteristic? = null
     private var rx: BluetoothGattCharacteristic? = null
     init {
@@ -57,8 +57,9 @@ class Bt630Transport(context: Context, private val lost: () -> Unit, private val
         })
     }
     override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
-        rx = gatt.getService(uuid(0xfff0))?.getCharacteristic(uuid(0xfff1))
-        tx = gatt.getService(uuid(0xfff0))?.getCharacteristic(uuid(0xfff2))
+        val service=gatt.getService(uuid(if(generic)0xffe0 else 0xfff0))
+        rx = service?.getCharacteristic(uuid(if(generic)0xffe1 else 0xfff1))
+        tx = service?.getCharacteristic(uuid(if(generic)0xffe1 else 0xfff2))
         return tx?.properties?.and(BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0 && tx != null
     }
     override fun initialize() {
@@ -74,12 +75,12 @@ class Bt630Transport(context: Context, private val lost: () -> Unit, private val
     override fun onServicesInvalidated() { tx=null;rx=null }
     override suspend fun open(device: BluetoothDevice): Unit = suspendCancellableCoroutine { continuation ->
         connect(device).timeout(10000).done { if(continuation.isActive) continuation.resume(Unit) }
-            .fail { _, status -> if(continuation.isActive) continuation.resumeWithException(IOException("BLE 连接失败：$status")) }.enqueue()
+            .fail { _, status -> if(continuation.isActive) continuation.resumeWithException(IOException("BLE 连接失败：$status；请核对 ${if(generic)"FFE0 / FFE1" else "FFF0 / FFF2"}")) }.enqueue()
         continuation.invokeOnCancellation { disconnect().enqueue() }
     }
     override suspend fun send(frame: ByteArray): Unit = suspendCancellableCoroutine { continuation ->
         val characteristic=tx
-        if(characteristic==null) { continuation.resumeWithException(IOException("FFF2 不可用")); return@suspendCancellableCoroutine }
+        if(characteristic==null) { continuation.resumeWithException(IOException("BLE 写入特征不可用")); return@suspendCancellableCoroutine }
         val type=if(characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         writeCharacteristic(characteristic,frame,type).timeout(1000)
