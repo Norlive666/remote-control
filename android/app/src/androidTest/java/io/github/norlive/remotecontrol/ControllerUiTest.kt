@@ -24,6 +24,20 @@ class ControllerUiTest {
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
     }
+    @Test fun bleUartModeIsSelectableAndSurvivesReload() {
+        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).assertIsSelected()
+        compose.runOnIdle {
+            assertEquals(LinkMode.BLE_UART,model().mode)
+            assertEquals(50L,model().mode.period)
+            assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
+        }
+        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("BT630 BLE",useUnmergedTree=true).performClick()
+        compose.runOnIdle { assertEquals(LinkMode.BT630,model().mode);assertEquals(20L,model().mode.period) }
+        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+    }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()
         compose.runOnIdle { model().movePanel("leftStick",PanelPosition(.31f,.67f)) }
