@@ -1,3 +1,19 @@
+# v1.3.1 验证记录
+
+增加BLE串口模式：FFE0服务、FFE1收发、20Hz；保留HC-05经典SPP20Hz与BT630 FFF0/FFF2 50Hz。BLE模式覆盖Android8–11定位权限，保存模式时兼容旧设置。HC05模式遇到仅LE设备提示切换。
+
+参考用户提供 [bt_mcu的BlueToothMaster](https://gitee.com/xie-rongji/bt_mcu/blob/master/app/src/main/java/xnj/lazydog/btcontroller/Bluetooth/BlueToothMaster.java) 默认BLE配置（服务FFE0、收发FFE1）。实际经典分支仍用安全SPP，与旧版相同；未将此前连接失败断定为安全/非安全差异，相关试验已撤回。本次独立审查无重要遗留问题。
+
+- Android单元测试30项通过；Android15横屏模拟器交互13项通过，新增BLE模式选择、20Hz周期、配置重载与三模式切换，原摇杆/滑块/布局12项回归通过。
+- Android debug/release APK、两套STM32主机行为测试与目标源编译通过。实际界面截图核对，面板布局保持。
+- 最终运行源码 `5ba92cee0e60ecaa5f717cd9041894ca980075ce` 的 [GitHub Actions 38103590544](https://github.com/Norlive666/remote-control/actions/runs/38103590544) 全部成功；APK来自该次未签名release产物，在本机以原密钥签名，v2/v3与对齐校验通过。versionCode5/versionName1.3.1。
+- APK SHA256：`62474c6144f5f9643a6879fbb568491ae2c5c8618499fed723e0462fe58f89ba`。
+- 签名证书SHA256：`27a45a0d6cddcf3952d44cd114034833a245a8029af3fd355b6c1a9eb7563935`，与旧版一致；密钥未上传。
+
+用户模块被判断可能走BLE，但尚未拿到其实际服务列表，未连接真实手机/蓝牙模块/开发板，本次未证明实物连接问题已修复。FFE0/FFE1模式仅覆盖参考程序默认配置，不覆盖任意自定义UUID。模块UART波特率仍需与STM32一致。
+
+---
+
 # v1.3.0 验证记录
 
 - 蓝色摇杆区域在白色卡片内独立移动；模块选择与大小滑条支持 50%～150% 请求倍率，受最低可操作尺寸及容器边界限制。外部卡片统一缩放保持宽高比，内部操作区域保持正方形；位置与大小共享保存、取消与恢复默认，并在重新打开后保留。
