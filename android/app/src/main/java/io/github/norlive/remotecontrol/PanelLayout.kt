@@ -42,7 +42,7 @@ class LayoutEditSession(saved: Map<String, PanelPosition> = emptyMap(),savedScal
     var savedScales: Map<String, Float> = savedScales.toMap(); private set
     private var draftScales: Map<String, Float> = emptyMap()
     val scales: Map<String, Float> get() = if(editing)draftScales else savedScales
-    fun resize(id: String,scale: Float) { if(editing && scale.isFinite())draftScales=draftScales+(id to scale.coerceIn(.5f,1.5f)) }
+    fun resize(id: String,scale: Float) { if(editing && scale.isFinite())draftScales=draftScales+(id to scale.coerceIn(.3f,2.5f)) }
     var saved: Map<String, PanelPosition> = saved.toMap()
         private set
     var draft: Map<String, PanelPosition> = emptyMap()

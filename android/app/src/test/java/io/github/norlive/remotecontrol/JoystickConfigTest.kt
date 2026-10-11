@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class JoystickConfigTest {
-    private fun eightWay(deadZone: Int=0,range: Int=1000)=JoystickConfig(deadZone,range,JoystickMode.entries.firstOrNull { it.name=="EIGHT_WAY" } ?: JoystickMode.FREE)
+    private fun eightWay(deadZone: Int=0,range: Int=1000)=JoystickConfig(deadZone,range,JoystickMode.EIGHT_WAY)
     @Test fun eightDirectionsSnapWithEqualVectorMagnitude() {
         val config=eightWay()
         assertEquals(1000 to 0,config.map(1000,200))

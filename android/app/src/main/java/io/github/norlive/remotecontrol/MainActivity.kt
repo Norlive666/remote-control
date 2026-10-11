@@ -136,6 +136,10 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: Joysti
             drawLine(Color(0xffcbd5e1),Offset(0f,center.y),Offset(size.width,center.y),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))
             drawLine(Color(0xffcbd5e1),Offset(center.x,0f),Offset(center.x,size.height),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))
             drawRoundRect(Line,topLeft=Offset(size.width*.13f,size.height*.13f),size=androidx.compose.ui.geometry.Size(size.width*.74f,size.height*.74f),cornerRadius=androidx.compose.ui.geometry.CornerRadius(12.dp.toPx()),style=Stroke(1.dp.toPx()))
+            if(config.mode==JoystickMode.EIGHT_WAY) {
+                drawLine(Color(0xffcbd5e1),Offset.Zero,Offset(size.width,size.height))
+                drawLine(Color(0xffcbd5e1),Offset(size.width,0f),Offset(0f,size.height))
+            }
             val knob=Offset(center.x+x/config.maxValue.toFloat()*size.width*.34f,center.y-y/config.maxValue.toFloat()*size.height*.34f)
             val radius=minOf(28.dp.toPx(),size.width*.15f)
             drawCircle(Color.White,radius,knob);drawCircle(Brush.radialGradient(listOf(Color(0xff38bdf8),Accent,Color(0xff01579b)),center=knob-Offset(radius*.35f,radius*.35f),radius=radius*1.5f),radius-3.5.dp.toPx(),knob)
@@ -167,7 +171,7 @@ private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Uni
                     }
                     HorizontalDivider()
                 }
-                Text("每个轴分别应用死区；自由模式支持斜向，方向按钮可限制单轴。修改设置后该摇杆归零，松手后重新操作。",fontSize=11.sp,color=Muted)
+                Text("自由与单轴模式分别应用各轴死区；八向模式按距离应用死区并吸附方向，力度连续变化。修改设置后该摇杆归零，松手后重新操作。",fontSize=11.sp,color=Muted)
                 Text("BLE 串口：20 Hz / STM32 默认 9600；BT630：50 Hz / STM32 115200。",fontSize=12.sp,color=Muted)
                 Text("最近提交的数据帧（不代表 STM32 已收到）",fontSize=12.sp)
                 Text(vm.lastFrame,fontSize=11.sp,fontFamily=FontFamily.Monospace,color=Muted)

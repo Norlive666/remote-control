@@ -34,7 +34,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.toMap(),layoutIds.mapNotNull { id ->
         val scale=preferences.getFloat("layout.$id.scale",1f)
-        if(preferences.contains("layout.$id.scale") && scale.isFinite())id to scale.coerceIn(.5f,1.5f) else null
+        if(preferences.contains("layout.$id.scale") && scale.isFinite())id to scale.coerceIn(.3f,2.5f) else null
     }.toMap())
     var layoutEditing by mutableStateOf(false); private set
     var layoutPositions by mutableStateOf(layoutSession.positions); private set

@@ -53,6 +53,42 @@ class ControllerUiTest {
         compose.runOnIdle { assertEquals(LinkMode.BT630,model().mode);assertEquals(20L,model().mode.period) }
         compose.onNodeWithTag("link-mode-BLE_UART").performClick()
     }
+    @Test fun eightWayTouchSnapsAndReleaseZerosAndModeReloads() {
+        compose.runOnIdle { model().setStickConfig(0,JoystickConfig(mode=JoystickMode.EIGHT_WAY)) }
+        val left=compose.onNodeWithTag("左摇杆",useUnmergedTree=true).fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { down(0,Offset(left.left+left.width*.84f,left.top+left.height*.56f)) }
+        compose.runOnIdle { assertEquals(1000,model().controls.lx);assertEquals(0,model().controls.ly) }
+        compose.onRoot().performTouchInput { moveTo(0,Offset(left.left+left.width*.8f,left.top+left.height*.2f)) }
+        compose.runOnIdle { assertEquals(707,model().controls.lx);assertEquals(707,model().controls.ly) }
+        compose.onRoot().performTouchInput { up(0) }
+        compose.runOnIdle {
+            assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly)
+            assertEquals("EIGHT_WAY",RemoteViewModel(compose.activity.application).stickConfigs[0].mode.name)
+        }
+    }
+    @Test fun bothSlidersShrinkAndExpandedPadSizePersists() {
+        editLayout()
+        for((id,scale) in listOf("leftSlider" to .35f,"rightSlider" to .45f)) {
+            val before=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
+            compose.runOnIdle { model().selectPanel(id) }
+            compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(scale) }
+            val after=compose.onNodeWithTag("move-$id").fetchSemanticsNode().boundsInRoot
+            assertEquals(before.width*scale,after.width,2f);assertEquals(before.height*scale,after.height,2f)
+        }
+        compose.runOnIdle { model().selectPanel("leftPad") }
+        compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(2f) }
+        val big=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("layout-size").performSemanticsAction(SemanticsActions.SetProgress) { it(.3f) }
+        val small=compose.onNodeWithTag("move-leftPad").fetchSemanticsNode().boundsInRoot
+        assertTrue(small.width<big.width*.3f)
+        compose.onNodeWithText("保存",useUnmergedTree=true).performClick()
+        compose.activityRule.scenario.recreate()
+        compose.runOnIdle {
+            assertEquals(.35f,model().layoutScales["leftSlider"]!!,.001f)
+            assertEquals(.45f,model().layoutScales["rightSlider"]!!,.001f)
+            assertEquals(.3f,model().layoutScales["leftPad"]!!,.001f)
+        }
+    }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()
         compose.runOnIdle { model().movePanel("leftStick",PanelPosition(.31f,.67f)) }
@@ -100,6 +136,8 @@ class ControllerUiTest {
             model().axes(true,800,-1000)
             assertEquals(0,model().controls.lx);assertEquals(-1000,model().controls.ly)
         }
+        compose.onNodeWithTag("stick-mode-0").performClick()
+        compose.runOnIdle { assertEquals(JoystickMode.EIGHT_WAY,model().stickConfigs[0].mode) }
         compose.onNodeWithTag("stick-mode-0").performClick()
         compose.runOnIdle { assertEquals(JoystickMode.FREE,model().stickConfigs[0].mode) }
     }

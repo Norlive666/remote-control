@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -89,7 +92,7 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                         TextButton({expanded=true},contentPadding=PaddingValues(3.dp)){Text("${names[vm.selectedLayoutId]} ▾",fontSize=10.sp)}
                         DropdownMenu(expanded,{expanded=false}) { names.forEach { (id,name)->DropdownMenuItem(text={Text(name)},onClick={vm.selectPanel(id);expanded=false}) } }
                     }
-                    Slider(vm.layoutScales[vm.selectedLayoutId] ?: 1f,{vm.resizePanel(it)},valueRange=.5f..1.5f,modifier=Modifier.weight(1f).height(32.dp).testTag("layout-size"))
+                    Slider(vm.layoutScales[vm.selectedLayoutId] ?: 1f,{vm.resizePanel(it)},valueRange=.3f..2.5f,modifier=Modifier.weight(1f).height(32.dp).testTag("layout-size"))
                     Text("${((vm.layoutScales[vm.selectedLayoutId] ?: 1f)*100).roundToInt()}%",fontSize=10.sp)
                     Row {
                         TextButton({vm.cancelLayoutEdit()}){Text("取消")}
@@ -136,8 +139,7 @@ private fun BoxScope.PositionedItem(vm: RemoteViewModel,id: String,defaultX: Dp,
     val density=LocalDensity.current
     val scale=vm.layoutScales[id] ?: 1f
     val canvasWidth=with(density){canvas.x.toDp()};val canvasHeight=with(density){canvas.y.toDp()}
-    val minimumHeight=if(id.endsWith("Slider"))54.dp else if(id=="enable")100.dp else 150.dp
-    val effectiveScale=panelScale(scale,width.value,height.value,minOf(width,160.dp).value,minOf(height,minimumHeight).value,canvasWidth.value,canvasHeight.value)
+    val effectiveScale=panelScale(scale,width.value,height.value,width.value*.3f,height.value*.3f,canvasWidth.value,canvasHeight.value)
     val actualWidth=width*effectiveScale;val actualHeight=height*effectiveScale
     val item=with(density){Offset(actualWidth.toPx(),actualHeight.toPx())}
     val default=with(density){PanelPosition(
@@ -154,7 +156,16 @@ private fun BoxScope.PositionedItem(vm: RemoteViewModel,id: String,defaultX: Dp,
         .then(if(vm.layoutEditing)Modifier.border(2.dp,if(vm.selectedLayoutId==id)Accent else Line,RoundedCornerShape(8.dp)).clickable{vm.selectPanel(id)} else Modifier)
         .pointerInput(id,vm.layoutEditing,canvas,item) {
             if(vm.layoutEditing)detectDragGestures(onDragStart={vm.selectPanel(id)}) { change,delta -> change.consume();move(delta) }
-        },contentAlignment=Alignment.Center) { content() }
+        },contentAlignment=Alignment.TopStart) {
+        Box(Modifier.layout { measurable,_ ->
+            val placeable=measurable.measure(Constraints.fixed(width.roundToPx(),height.roundToPx()))
+            layout(actualWidth.roundToPx(),actualHeight.roundToPx()) {
+                placeable.placeWithLayer(0,0) {
+                    scaleX=effectiveScale;scaleY=effectiveScale;transformOrigin=TransformOrigin(0f,0f)
+                }
+            }
+        }) { content() }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -192,7 +203,8 @@ private fun StickControl(vm: RemoteViewModel,title: String,index: Int,x: Int,y: 
             val density=LocalDensity.current
             val scale=vm.layoutScales[id] ?: 1f
             val available=minOf(maxWidth,maxHeight)
-            val side=(minOf(available,260.dp)*.75f*scale).coerceIn(minOf(available,80.dp),available)
+            val baseSide=minOf(available,260.dp)*.75f
+            val side=(baseSide*scale).coerceIn(baseSide*.3f,available)
             val canvas=with(density){Offset(maxWidth.toPx(),maxHeight.toPx())}
             val item=with(density){side.toPx()}
             val position=vm.layoutPositions[id] ?: PanelPosition(.5f,.5f)

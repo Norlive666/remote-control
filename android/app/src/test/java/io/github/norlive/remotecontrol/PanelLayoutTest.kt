@@ -123,6 +123,6 @@ class PanelLayoutTest {
         session.begin();session.restoreDefaults();assertTrue(session.scales.isEmpty())
         session.cancel();assertEquals(1.2f,session.scales["leftPad"])
         assertEquals(PanelPosition(.2f,.3f),session.positions["leftPad"])
-        session.begin();session.resize("leftPad",9f);assertEquals(1.5f,session.scales["leftPad"])
+        session.begin();session.resize("leftPad",9f);assertEquals(2.5f,session.scales["leftPad"])
     }
 }
