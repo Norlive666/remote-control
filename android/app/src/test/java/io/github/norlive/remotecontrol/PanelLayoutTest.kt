@@ -6,6 +6,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PanelLayoutTest {
+    @Test fun expandedScaleRangeSurvivesSaveAndCancel() {
+        val session=LayoutEditSession()
+        session.begin();session.resize("leftSlider",.3f);session.resize("leftPad",2.5f);session.save()
+        assertEquals(.3f,session.savedScales["leftSlider"]!!,.001f)
+        assertEquals(2.5f,session.savedScales["leftPad"]!!,.001f)
+        session.begin();session.resize("leftPad",4f);assertEquals(2.5f,session.scales["leftPad"]!!,.001f)
+        session.resize("leftSlider",.1f);assertEquals(.3f,session.scales["leftSlider"]!!,.001f)
+        session.cancel();assertEquals(.3f,session.savedScales["leftSlider"]!!,.001f)
+    }
     @Test fun scalingPreservesAspectRatioAtMinimumAndCanvasLimit() {
         assertEquals(1f,panelScale(.5f,300f,54f,160f,54f,800f,400f),.001f)
         assertEquals(1.2f,panelScale(1.5f,200f,250f,160f,150f,800f,300f),.001f)
