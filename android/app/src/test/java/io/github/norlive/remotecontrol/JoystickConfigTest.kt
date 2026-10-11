@@ -4,38 +4,44 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class JoystickConfigTest {
-    private fun eightWay(deadZone: Int=0,range: Int=1000)=JoystickConfig(deadZone,range,JoystickMode.EIGHT_WAY)
-    @Test fun eightDirectionsSnapWithEqualVectorMagnitude() {
-        val config=eightWay()
+    private fun fourWay(deadZone: Int=0,range: Int=1000)=JoystickConfig(deadZone,range,JoystickMode.EIGHT_WAY)
+    @Test fun fourDirectionsOnlyProduceOneAxis() {
+        val config=fourWay()
         assertEquals(1000 to 0,config.map(1000,200))
-        assertEquals(707 to 707,config.map(800,700))
+        assertEquals(1000 to 0,config.map(800,700))
         assertEquals(0 to 1000,config.map(200,1000))
-        assertEquals(-707 to 707,config.map(-800,700))
+        assertEquals(-1000 to 0,config.map(-800,700))
         assertEquals(-1000 to 0,config.map(-1000,200))
-        assertEquals(-707 to -707,config.map(-800,-700))
+        assertEquals(-1000 to 0,config.map(-800,-700))
         assertEquals(0 to -1000,config.map(200,-1000))
-        assertEquals(707 to -707,config.map(800,-700))
+        assertEquals(1000 to 0,config.map(800,-700))
     }
-    @Test fun eightWayKeepsDirectionBeyondFullForceRadius() {
-        assertEquals(1000 to 0,eightWay().map(1441,529))
-        assertEquals(0 to -1000,eightWay().map(529,-1441))
-        assertEquals(-1000 to 0,eightWay().map(-1441,-529))
+    @Test fun fourWayKeepsDirectionBeyondFullForceRadius() {
+        assertEquals(1000 to 0,fourWay().map(1441,529))
+        assertEquals(0 to -1000,fourWay().map(529,-1441))
+        assertEquals(-1000 to 0,fourWay().map(-1441,-529))
     }
-    @Test fun eightWayUsesRadialDeadZoneAndContinuousForce() {
-        val config=eightWay(10)
+    @Test fun fourWayUsesRadialDeadZoneAndContinuousForce() {
+        val config=fourWay(10)
         assertEquals(0 to 0,config.map(60,60))
         assertEquals(0 to 0,config.map(100,0))
         assertEquals(500 to 0,config.map(550,0))
-        assertEquals(350 to 350,config.map(386,386))
+        assertEquals(0 to 495,config.map(386,386))
         assertEquals(0 to 0,config.map(0,0))
-        assertEquals(180 to -180,eightWay(0,255).map(1000,-1000))
+        assertEquals(0 to -255,fourWay(0,255).map(1000,-1000))
     }
-    @Test fun eightWayAngleBoundaryIsHalfwayBetweenDirections() {
-        val config=eightWay()
-        assertEquals(1000 to 0,config.map(1000,414))
-        assertEquals(707 to 707,config.map(1000,415))
-        assertEquals(0 to 1000,config.map(414,1000))
-        assertEquals(707 to 707,config.map(415,1000))
+    @Test fun fourWayPrefersVerticalAtEveryDiagonalTie() {
+        val config=fourWay()
+        assertEquals(1000 to 0,config.map(1000,999))
+        assertEquals(0 to 1000,config.map(1000,1000))
+        assertEquals(0 to 1000,config.map(-1000,1000))
+        assertEquals(0 to -1000,config.map(1000,-1000))
+        assertEquals(0 to -1000,config.map(-1000,-1000))
+        assertEquals(0 to 1000,config.map(999,1000))
+    }
+    @Test fun fourWayDoesNotClampCoordinatesBeforeChoosingDirection() {
+        assertEquals(1000 to 0,fourWay().map(1500,1100))
+        assertEquals(0 to 1000,fourWay().map(1100,1500))
     }
     @Test fun independentDeadZonesRemoveCrossAxisDrift() {
         val config=JoystickConfig()
