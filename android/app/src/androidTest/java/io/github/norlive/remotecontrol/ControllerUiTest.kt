@@ -28,6 +28,17 @@ class ControllerUiTest {
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
     }
+    @Test fun classicModeIsRemovedAndOldPreferenceFallsBackToBle() {
+        compose.runOnIdle {
+            val prefs=compose.activity.application.getSharedPreferences("controller",0)
+            prefs.edit().putString("mode","HC05").commit()
+            assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
+            prefs.edit().remove("mode").commit()
+            assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
+        }
+        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("link-mode-HC05").assertDoesNotExist()
+    }
     @Test fun bleUartModeIsSelectableAndSurvivesReload() {
         compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
         compose.onNodeWithTag("link-mode-BLE_UART").performClick()
