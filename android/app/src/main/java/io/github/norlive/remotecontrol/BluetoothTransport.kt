@@ -3,9 +3,7 @@ package io.github.norlive.remotecontrol
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import no.nordicsemi.android.ble.BleManager
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import java.io.IOException
@@ -17,28 +15,6 @@ interface BluetoothTransport {
     suspend fun open(device: BluetoothDevice)
     suspend fun send(frame: ByteArray)
     fun close()
-}
-
-/** One sequential caller owns writes; closing the socket unblocks a pending write. */
-@SuppressLint("MissingPermission")
-class ClassicTransport : BluetoothTransport {
-    @Volatile private var socket: BluetoothSocket? = null
-    private var closed=false
-    override suspend fun open(device: BluetoothDevice) = withContext(Dispatchers.IO) {
-        val pending = device.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805f9b34fb"))
-        synchronized(this) {
-            if(closed){pending.close();throw IOException("连接已取消")}
-            socket=pending
-        }
-        try { pending.connect() } catch (e: Exception) { pending.close(); throw e }
-    }
-    override suspend fun send(frame: ByteArray) = withContext(Dispatchers.IO) {
-        (socket ?: throw IOException("连接已关闭")).outputStream.write(frame)
-    }
-    override fun close() {
-        val old=synchronized(this){closed=true;val old=socket;socket=null;old}
-        runCatching { old?.close() }
-    }
 }
 
 /** Nordic serializes GATT writes for BT630 and FFE0/FFE1 UART modules. */

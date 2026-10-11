@@ -21,7 +21,7 @@ class ControllerUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { changeMode(LinkMode.HC05);beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig()) } }
+        compose.runOnIdle { model().apply { changeMode(LinkMode.BLE_UART);beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig()) } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -36,11 +36,11 @@ class ControllerUiTest {
             prefs.edit().remove("mode").commit()
             assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
         }
-        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).performClick()
         compose.onNodeWithTag("link-mode-HC05").assertDoesNotExist()
     }
     @Test fun bleUartModeIsSelectableAndSurvivesReload() {
-        compose.onNodeWithText("HC-05",useUnmergedTree=true).performClick()
+        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).performClick()
         compose.onNodeWithTag("link-mode-BLE_UART").performClick()
         compose.onNodeWithTag("link-mode-BLE_UART").assertIsSelected()
         compose.runOnIdle {
@@ -48,10 +48,10 @@ class ControllerUiTest {
             assertEquals(50L,model().mode.period)
             assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
         }
-        compose.onNodeWithTag("link-mode-HC05").performClick()
+        compose.onNodeWithTag("link-mode-BLE_UART").performClick()
         compose.onNodeWithTag("link-mode-BT630").performClick()
         compose.runOnIdle { assertEquals(LinkMode.BT630,model().mode);assertEquals(20L,model().mode.period) }
-        compose.onNodeWithTag("link-mode-HC05").performClick()
+        compose.onNodeWithTag("link-mode-BLE_UART").performClick()
     }
     @Test fun savedPositionsReloadAndDefaultsCanBeRestored() {
         editLayout()

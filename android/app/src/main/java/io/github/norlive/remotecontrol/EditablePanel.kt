@@ -115,7 +115,7 @@ private fun BluetoothHub(vm: RemoteViewModel,onConnect: ()->Unit) {
             Icon(Icons.Outlined.Bluetooth,null,Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Column {
-                Text(when(vm.mode){LinkMode.HC05->"HC-05";LinkMode.BT630->"FSC-BT630";LinkMode.BLE_UART->"BLE 串口"},fontSize=11.sp,lineHeight=12.sp,fontWeight=FontWeight.Bold)
+                Text(when(vm.mode){LinkMode.BT630->"FSC-BT630";LinkMode.BLE_UART->"BLE 串口"},fontSize=11.sp,lineHeight=12.sp,fontWeight=FontWeight.Bold)
                 Text(if(vm.connected)"点击查看连接" else "点击配对连接",fontSize=9.sp,lineHeight=10.sp,color=Muted)
             }
         }
