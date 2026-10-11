@@ -259,7 +259,7 @@ class ControllerUiTest {
         val right=compose.onNodeWithTag("右摇杆").fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput {
             down(0,left.center);down(1,right.center)
-            updatePointerTo(0,Offset(left.left+left.width*.7f,left.top+left.height*.2f))
+            updatePointerTo(0,Offset(left.left+left.width*.8f,left.top+left.height*.2f))
             updatePointerTo(1,Offset(right.left+right.width*.2f,right.top+right.height*.8f))
             move()
         }
