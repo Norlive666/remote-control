@@ -59,6 +59,38 @@ class ControllerUiTest {
             assertEquals(0,flags[index] and android.content.pm.PackageInfo.REQUESTED_PERMISSION_NEVER_FOR_LOCATION)
         }
     }
+    @Test fun preciseLocationRetryIncludesAlreadyGrantedCoarsePermission() {
+        compose.runOnIdle {
+            val required=model().permissions().toSet()
+            assertEquals(setOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION),
+                model().permissions(required-Manifest.permission.ACCESS_FINE_LOCATION).toSet())
+            assertTrue(model().permissions(required).isEmpty())
+        }
+    }
+    @Test fun backgroundStopsBothScansAndLateCallbackCannotAddDevice() {
+        val vm=model()
+        val app=compose.activity.application
+        val adapter=compose.activity.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        lateinit var callback: android.bluetooth.le.ScanCallback
+        lateinit var receiver: android.content.BroadcastReceiver
+        compose.runOnIdle {
+            vm.refreshDevices()
+            callback=RemoteViewModel::class.java.getDeclaredField("scanCallback").apply { isAccessible=true }.get(vm) as android.bluetooth.le.ScanCallback
+            receiver=RemoteViewModel::class.java.getDeclaredField("scanReceiver").apply { isAccessible=true }.get(vm) as android.content.BroadcastReceiver
+            val device=adapter.getRemoteDevice("F2:E7:05:FA:F8:F2")
+            callback.onScanResult(1,android.bluetooth.le.ScanResult(device,null,-50,1))
+        }
+        compose.runOnIdle { assertEquals(1,vm.devices.size);vm.foreground(false);assertFalse(vm.scanning) }
+        var unregistered=false
+        try { app.unregisterReceiver(receiver) } catch(_: IllegalArgumentException) { unregistered=true }
+        assertTrue("System discovery receiver must be unregistered",unregistered)
+        compose.runOnIdle {
+            vm.foreground(true)
+            val other=adapter.getRemoteDevice("FA:ED:FC:7D:D5:F7")
+            callback.onScanResult(1,android.bluetooth.le.ScanResult(other,null,-50,2))
+        }
+        compose.runOnIdle { assertEquals(1,vm.devices.size) }
+    }
     @Test fun classicModeIsRemovedAndOldPreferenceFallsBackToBle() {
         compose.runOnIdle {
             val prefs=compose.activity.application.getSharedPreferences("controller",0)

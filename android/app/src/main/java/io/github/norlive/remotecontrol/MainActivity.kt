@@ -72,8 +72,9 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun findDevices() {
-        val missing=model.permissions().filter { checkSelfPermission(it)!=PackageManager.PERMISSION_GRANTED }
-        if(missing.isEmpty())model.refreshDevices() else permissionRequest.launch(missing.toTypedArray())
+        val granted=model.permissions().filter { checkSelfPermission(it)==PackageManager.PERMISSION_GRANTED }.toSet()
+        val missing=model.permissions(granted)
+        if(missing.isEmpty())model.refreshDevices() else permissionRequest.launch(missing)
     }
     override fun onStart() { super.onStart();model.foreground(true) }
     override fun onStop() { model.foreground(false);super.onStop() }

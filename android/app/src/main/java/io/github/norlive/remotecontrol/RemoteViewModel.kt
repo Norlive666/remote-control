@@ -100,9 +100,15 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private var foreground=false
     private var sequence=0
 
-    fun permissions(): Array<String> = if(Build.VERSION.SDK_INT>=31)
-        arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION)
-        else arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION)
+    fun permissions(granted: Set<String> = emptySet()): Array<String> {
+        val required=if(Build.VERSION.SDK_INT>=31)
+            arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION)
+            else arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION)
+        val missing=required.filterNot { it in granted }
+        return if(Manifest.permission.ACCESS_FINE_LOCATION in missing)
+            required.filter { it in missing || it==Manifest.permission.ACCESS_COARSE_LOCATION }.toTypedArray()
+        else missing.toTypedArray()
+    }
     fun error(message: String) { status=message }
     fun changeMode(value: LinkMode) {
         if(mode==value)return
