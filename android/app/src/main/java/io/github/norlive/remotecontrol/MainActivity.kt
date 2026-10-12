@@ -57,7 +57,7 @@ internal val Pad=Color(0xffeaf1f8)
 class MainActivity : ComponentActivity() {
     private val model: RemoteViewModel by viewModels()
     private val permissionRequest=registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if(result.values.all { it })model.refreshDevices() else model.error("蓝牙权限未授予，请在系统应用设置中允许附近设备权限")
+        if(result.values.all { it })model.refreshDevices() else model.error("请在系统应用设置中允许附近设备和精确位置权限，定位权限仅用于蓝牙搜索")
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,9 +97,11 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { LinkMode.entries.forEach { mode -> FilterChip(vm.mode==mode,{vm.changeMode(mode);scan()},modifier=Modifier.testTag("link-mode-${mode.name}"),label={Text(when(mode){LinkMode.BT630->"BT630 BLE";LinkMode.BLE_UART->"BLE 串口"})}) } }
                 Text(when(vm.mode){LinkMode.BT630->"选择 BT630；连接时检查 FFF0 / FFF2 特征。";LinkMode.BLE_UART->"扫描 BLE 串口模块；检查 FFE0 服务与 FFE1 收发特征，无需先配对。"},fontSize=12.sp)
                 Text(vm.status,fontSize=12.sp,color=Muted)
+                if(vm.scanDetails.isNotEmpty())Text(vm.scanDetails,fontSize=11.sp,color=Muted)
+                Text("搜索需开启定位并允许精确位置权限；App 不读取 GPS 坐标。无需先系统配对。",fontSize=11.sp,color=Muted)
                 vm.devices.forEach { device ->
                     OutlinedButton(onClick={vm.connect(device);connectionDialog=false},modifier=Modifier.fillMaxWidth(),enabled=!vm.connecting) {
-                        Column(Modifier.fillMaxWidth()) { Text(device.name);Text(device.address,fontSize=11.sp,color=Muted) }
+                        Column(Modifier.fillMaxWidth()) { Text(device.name);Text("${device.address} · ${device.source}",fontSize=11.sp,color=Muted) }
                     }
                 }
                 Text("连接表示蓝牙链路就绪；当前协议不含 STM32 收包确认。",fontSize=11.sp,color=Muted)

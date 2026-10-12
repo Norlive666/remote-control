@@ -3,11 +3,18 @@ package io.github.norlive.remotecontrol
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.location.LocationManager
+import android.os.Build
+import android.provider.Settings
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.*
@@ -18,7 +25,16 @@ import kotlin.math.roundToInt
 import java.io.IOException
 
 enum class LinkMode(val title: String, val period: Long) { BLE_UART("BLE 串口 · FFE0/FFE1",50), BT630("BT630 · BLE",20) }
-data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice)
+data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice,val viaBle: Boolean=false,val viaSystem: Boolean=false) {
+    val source: String get()=if(viaBle && viaSystem)"BLE + 系统发现" else if(viaBle)"BLE" else "系统发现"
+}
+internal fun mergeDeviceRows(rows: List<DeviceRow>,incoming: DeviceRow): List<DeviceRow> {
+    val old=rows.firstOrNull { it.address==incoming.address }
+    val merged=incoming.copy(
+        name=if(incoming.name=="未命名 BLE 设备" && old!=null)old.name else incoming.name,
+        viaBle=incoming.viaBle || old?.viaBle==true,viaSystem=incoming.viaSystem || old?.viaSystem==true)
+    return (rows.filterNot { it.address==incoming.address }+merged).sortedBy { it.name }
+}
 
 @SuppressLint("MissingPermission")
 class RemoteViewModel(application: Application) : AndroidViewModel(application) {
@@ -48,6 +64,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var connecting by mutableStateOf(false); private set
     var scanning by mutableStateOf(false); private set
     var devices by mutableStateOf(listOf<DeviceRow>()); private set
+    var scanDetails by mutableStateOf(""); private set
     var lastReceived by mutableStateOf("—"); private set
     var lastFrame by mutableStateOf("—"); private set
     var sent by mutableLongStateOf(0); private set
@@ -72,42 +89,117 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private var scanCallback: ScanCallback?=null
     private var scanner: android.bluetooth.le.BluetoothLeScanner?=null
     private var scanTimeout: Runnable?=null
+    private var scanReceiver: BroadcastReceiver?=null
+    private var systemScanActive=false
+    private var systemScanStarted=false
+    private var bleResults=0
+    private var systemResults=0
+    private var bleScanNote="未启动"
+    private var systemScanNote="未启动"
     private var generation=0
     private var foreground=false
     private var sequence=0
 
-    fun permissions(): Array<String> = if(android.os.Build.VERSION.SDK_INT>=31)
-        arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN)
-        else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    fun permissions(): Array<String> = if(Build.VERSION.SDK_INT>=31)
+        arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION)
+        else arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION)
     fun error(message: String) { status=message }
     fun changeMode(value: LinkMode) {
         if(mode==value)return
-        disconnect();mode=value;devices=emptyList();preferences.edit().putString("mode",value.name).apply()
+        disconnect();mode=value;devices=emptyList();scanDetails="";preferences.edit().putString("mode",value.name).apply()
+    }
+    private fun updateScanDetails() {
+        scanDetails="BLE：$bleResults 条（$bleScanNote）；系统：$systemResults 条（$systemScanNote）；可选 ${devices.size} 个"
+    }
+    private fun recordDevice(device: BluetoothDevice,name: String?,ble: Boolean) {
+        if(ble)bleResults++ else systemResults++
+        if(ble || device.type==BluetoothDevice.DEVICE_TYPE_LE || device.type==BluetoothDevice.DEVICE_TYPE_DUAL) {
+            val item=DeviceRow(name?.takeIf { it.isNotBlank() } ?: device.name?.takeIf { it.isNotBlank() } ?: "未命名 BLE 设备",
+                device.address,device,viaBle=ble,viaSystem=!ble)
+            devices=mergeDeviceRows(devices,item)
+        }
+        updateScanDetails()
     }
     fun refreshDevices() {
-        stopScan();devices=emptyList()
+        if(connected || connecting)disconnect() else stopScan()
+        devices=emptyList();scanDetails="";bleResults=0;systemResults=0;bleScanNote="未启动";systemScanNote="未启动"
         if(adapter==null) { status="手机不支持蓝牙";return }
         if(!adapter.isEnabled) { status="请先开启手机蓝牙";return }
-        val currentScanner=adapter.bluetoothLeScanner ?: run { status="BLE 扫描不可用";return }
-        val callback=object: ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                main.post {
-                    if(scanCallback!==this || !foreground)return@post
-                    val item=DeviceRow(result.scanRecord?.deviceName ?: result.device.name ?: "未命名 BLE 设备",result.device.address,result.device)
-                    devices=(devices.filterNot { it.address==item.address }+item).sortedBy { it.name }
+        val application=getApplication<Application>()
+        val location=application.getSystemService(LocationManager::class.java)
+        val locationEnabled=if(Build.VERSION.SDK_INT>=28)location?.isLocationEnabled==true
+            else Settings.Secure.getInt(application.contentResolver,Settings.Secure.LOCATION_MODE,Settings.Secure.LOCATION_MODE_OFF)!=Settings.Secure.LOCATION_MODE_OFF
+        if(!locationEnabled) { status="请开启手机定位开关，用于蓝牙设备搜索";return }
+        scanning=true;status="正在扫描 BLE 和系统设备…"
+        systemScanStarted=adapter.isDiscovering
+        val receiver=object: BroadcastReceiver() {
+            override fun onReceive(context: Context,intent: Intent) {
+                if(scanReceiver!==this || !foreground)return
+                when(intent.action) {
+                    BluetoothAdapter.ACTION_DISCOVERY_STARTED -> { systemScanStarted=true;systemScanActive=true;systemScanNote="扫描中";updateScanDetails() }
+                    BluetoothDevice.ACTION_FOUND -> {
+                        val device=if(Build.VERSION.SDK_INT>=33)intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE,BluetoothDevice::class.java)
+                            else intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        device?.let { recordDevice(it,null,false) }
+                    }
+                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> if(systemScanStarted && !adapter.isDiscovering) {
+                        systemScanActive=false;systemScanNote="结束";updateScanDetails()
+                        if(scanCallback==null)finishScan()
+                    }
                 }
             }
-            override fun onScanFailed(errorCode: Int) { main.post { if(scanCallback===this){stopScan();status="扫描失败：$errorCode"} } }
         }
-        scanner=currentScanner;scanCallback=callback;scanning=true;status="正在扫描 BLE 设备…"
-        currentScanner.startScan(null,ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),callback)
-        scanTimeout=Runnable { if(scanCallback===callback){stopScan();status=if(devices.isEmpty())"未发现 BLE 设备；检查模块供电与定位开关" else "请选择 BLE 设备"} }.also { main.postDelayed(it,10000) }
+        try {
+            val filter=IntentFilter().apply { addAction(BluetoothDevice.ACTION_FOUND);addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED);addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED) }
+            if(Build.VERSION.SDK_INT>=33)application.registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED)
+            else application.registerReceiver(receiver,filter)
+            scanReceiver=receiver
+            systemScanActive=adapter.isDiscovering || adapter.startDiscovery()
+            systemScanNote=if(systemScanActive)"扫描中" else "启动失败"
+        } catch(e: RuntimeException) { systemScanNote="启动失败：${e.message ?: "权限或系统状态异常"}" }
+        val currentScanner=adapter.bluetoothLeScanner
+        if(currentScanner==null)bleScanNote="不可用"
+        else {
+            val callback=object: ScanCallback() {
+                override fun onScanResult(callbackType: Int,result: ScanResult) {
+                    main.post { if(scanCallback===this && foreground)recordDevice(result.device,result.scanRecord?.deviceName,true) }
+                }
+                override fun onScanFailed(errorCode: Int) {
+                    main.post {
+                        if(scanCallback===this) {
+                            runCatching { scanner?.stopScan(this) };scanCallback=null;bleScanNote="失败 $errorCode";updateScanDetails()
+                            if(!systemScanActive)finishScan()
+                        }
+                    }
+                }
+            }
+            scanner=currentScanner;scanCallback=callback
+            try { currentScanner.startScan(callback);bleScanNote="扫描中" }
+            catch(e: RuntimeException) { scanCallback=null;bleScanNote="启动失败：${e.message ?: "权限或系统状态异常"}" }
+        }
+        updateScanDetails()
+        if(scanCallback==null && !systemScanActive)finishScan()
+        else scanTimeout=Runnable { finishScan() }.also { main.postDelayed(it,20000) }
+    }
+    private fun finishScan() {
+        if(bleScanNote=="扫描中")bleScanNote="结束"
+        if(systemScanNote=="扫描中")systemScanNote="结束"
+        stopScan()
+        status=if(devices.isEmpty())"未发现 BLE 设备，请检查模块是否正在广播" else "请选择 BLE 设备"
     }
     fun stopScan() {
         scanTimeout?.let { main.removeCallbacks(it) };scanTimeout=null
         val callback=scanCallback;scanCallback=null;scanning=false
         if(callback!=null)runCatching { scanner?.stopScan(callback) }
         scanner=null
+        val receiver=scanReceiver;scanReceiver=null
+        if(systemScanActive)runCatching { adapter?.cancelDiscovery() }
+        systemScanActive=false;systemScanStarted=false
+        if(receiver!=null)runCatching { getApplication<Application>().unregisterReceiver(receiver) }
+        if(bleScanNote=="扫描中")bleScanNote="已停止"
+        if(systemScanNote=="扫描中")systemScanNote="已停止"
+        if(scanDetails.isNotEmpty())updateScanDetails()
+        if(status.startsWith("正在扫描"))status="扫描已停止"
     }
     fun connect(row: DeviceRow) {
         disconnect();if(!foreground)return

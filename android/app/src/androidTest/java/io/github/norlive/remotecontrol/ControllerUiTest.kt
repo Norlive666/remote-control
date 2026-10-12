@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ControllerUiTest {
-    @get:Rule val permissions=GrantPermissionRule.grant(*if(Build.VERSION.SDK_INT>=31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN) else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+    @get:Rule val permissions=GrantPermissionRule.grant(*if(Build.VERSION.SDK_INT>=31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION) else arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION))
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
@@ -32,6 +32,31 @@ class ControllerUiTest {
         compose.runOnIdle {
             assertTrue(model().permissions().contains(Manifest.permission.ACCESS_FINE_LOCATION))
             assertTrue(model().permissions().contains(Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+    @Test fun discoveryRowsMergeSourcesAndKeepKnownNames() {
+        val adapter=compose.activity.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        val device=adapter.getRemoteDevice("F2:E7:05:FA:F8:F2")
+        val system=DeviceRow("Feasycom",device.address,device,viaSystem=true)
+        val ble=DeviceRow("未命名 BLE 设备",device.address,device,viaBle=true)
+        var rows=mergeDeviceRows(emptyList(),system)
+        rows=mergeDeviceRows(rows,ble)
+        assertEquals(1,rows.size);assertEquals("Feasycom",rows.single().name)
+        assertTrue(rows.single().viaSystem);assertTrue(rows.single().viaBle)
+        rows=mergeDeviceRows(rows,system)
+        assertEquals(1,rows.size);assertTrue(rows.single().viaBle)
+        val other=adapter.getRemoteDevice("FA:ED:FC:7D:D5:F7")
+        rows=mergeDeviceRows(rows,DeviceRow("另一个模块",other.address,other,viaBle=true))
+        assertEquals(2,rows.size)
+    }
+    @Test fun scanManifestDoesNotFilterLocationRelatedAdvertisements() {
+        if(Build.VERSION.SDK_INT>=31) {
+            val info=compose.activity.packageManager.getPackageInfo(compose.activity.packageName,android.content.pm.PackageManager.GET_PERMISSIONS)
+            val index=(info.requestedPermissions ?: emptyArray()).indexOf(Manifest.permission.BLUETOOTH_SCAN)
+            assertTrue(index>=0)
+            val flags=info.requestedPermissionsFlags ?: intArrayOf()
+            assertTrue(index in flags.indices)
+            assertEquals(0,flags[index] and android.content.pm.PackageInfo.REQUESTED_PERMISSION_NEVER_FOR_LOCATION)
         }
     }
     @Test fun classicModeIsRemovedAndOldPreferenceFallsBackToBle() {

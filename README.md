@@ -6,7 +6,7 @@
 
 ## 下载与开始测试
 
-安装 APK：[v1.4.1 下载](https://github.com/Norlive666/remote-control/releases/download/v1.4.1/remote-control-v1.4.1.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+安装 APK：[v1.4.2 下载](https://github.com/Norlive666/remote-control/releases/download/v1.4.2/remote-control-v1.4.2.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
 驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.0.0/remote-control-stm32-v2.0.0.zip)。
 
@@ -22,6 +22,14 @@
 8. 自由模式对 X/Y 分别应用死区，小幅偏移归零，斜向仍可同时输出两个轴；越过死区后连续映射到设置的最大值。设置页显示最近提交给蓝牙的数据帧，BLE 串口显示 FFE1、BT630 显示 FFF1 通知的原始数据。
 
 **UART 参数属于模块配置，手机连接方式不能修改它。**STM32 初始化波特率应与模块实际参数一致；如模块已配置为 115200，可用 `RC_InitBaud(115200)`。BLE 串口发送频率为 20 Hz。
+
+## 蓝牙扫描权限
+
+v1.4.2 按 bt_mcu 同时使用系统发现与默认 BLE 扫描，按地址去重，设备行标注来源。系统结果只列出 LE/DUAL 设备；连接仍只使用 BLE GATT，无需先在系统配对。扫描最多20秒，状态显示两路结果条数、可选设备数及错误；一条扫描失败时另一条继续。
+
+首次搜索请允许「附近设备」（Android12+）和「精确位置」权限，并开启手机定位开关。定位权限用于蓝牙搜索，不读取 GPS 坐标；移除 neverForLocation，避免它带来的部分广播过滤。刷新已连接设备会先断开控制链路；后台、连接和关闭搜索窗口会停止扫描并注销接收器。
+
+如果仍看不到模块，请反馈扫描状态、两路数量/错误、手机型号和 Android版本。源码、模拟器不能确认真实 BT630 广播已被发现。
 
 ## 控制与断线行为
 
