@@ -28,6 +28,12 @@ class ControllerUiTest {
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
     }
+    @Test fun scannerRequestsLocationLikeBtMcu() {
+        compose.runOnIdle {
+            assertTrue(model().permissions().contains(Manifest.permission.ACCESS_FINE_LOCATION))
+            assertTrue(model().permissions().contains(Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
     @Test fun classicModeIsRemovedAndOldPreferenceFallsBackToBle() {
         compose.runOnIdle {
             val prefs=compose.activity.application.getSharedPreferences("controller",0)
