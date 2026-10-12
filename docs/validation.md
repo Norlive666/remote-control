@@ -1,3 +1,13 @@
+# v1.4.2 — 蓝牙扫描兼容
+
+- 按 bt_mcu commit10dddc6 对齐扫描：默认 BLE 扫描与系统发现并行，按地址合并来源/保留名字；系统结果只列LE/DUAL，仍仅BLEGATT连接。
+- 移除 neverForLocation；所有支持版本申请COARSE/FINE，Android12+另申请附近设备；定位开关关闭时提示。部分授权后重试精确定位必须保持COARSE/FINE成对，已补回归测试。
+- 20秒兜底，系统结束后BLE继续；单路失败保留另一条；连接/后台/退出搜索窗口停止并注销接收器。设备行显示来源，扫描诊断显示原始结果条数、可选数及错误。
+- 原权限测试先在旧版失败（38260133139）。[最终验证38264625892](https://github.com/Norlive666/remote-control/actions/runs/38264625892)，源码 `47a9fed742201712711ea444af616290b725b12a`：36单元、25Android15横屏界面测试全部0失败/0错误/0跳过，STM32任务通过。覆盖权限、Manifest、部分授权重试、来源合并、后台释放接收器和迟到BLE回调。独立复核提出的精确定位重试问题已修正并复审通过。
+- versionCode9/versionName1.4.2；Google官方BuildTools35包校验SHA1 `2cfaa0bbb2336e9ec18ed3ecea84fa2e2af607bc`，工具持久缓存于 tools/.cache/android-15（不提交）；仅本机原密钥签名，v2/v3通过；证书SHA256 `27a45a0d6cddcf3952d44cd114034833a245a8029af3fd355b6c1a9eb7563935`。
+- [已发布APK](https://github.com/Norlive666/remote-control/releases/tag/v1.4.2)，SHA256 `54b392b97c7090381b8f0e319806ab5deaaada0aad68bfeb9aadfbe0cf64d26d`，GitHub资产校验一致。
+- 未在用户手机与真实BT630上确认广播可见性或通信；这些测试不等于用户实机漏扫已经解决。四向、布局和协议保持原行为。
+
 # v1.4.1 — 四向摇杆
 
 - 八向替换为四向：比较原始坐标绝对值选横/纵，另一轴始终零，45° 相等时优先纵向；保留径向死区、连续力度和 ±1～±1000 范围。外圈不会因逐轴截断而误选方向。
