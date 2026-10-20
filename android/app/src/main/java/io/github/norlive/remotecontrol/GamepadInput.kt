@@ -6,7 +6,6 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import kotlin.math.roundToInt
-import kotlin.math.abs
 
 internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : InputManager.InputDeviceListener {
     private val manager=context.getSystemService(InputManager::class.java)
@@ -78,7 +77,9 @@ internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : 
         val lt=triggerValue(MotionEvent.AXIS_LTRIGGER,MotionEvent.AXIS_BRAKE)
         val rt=triggerValue(MotionEvent.AXIS_RTRIGGER,MotionEvent.AXIS_GAS)
         vm.gamepadEvent("id=${event.deviceId} source=0x${event.source.toString(16)} X=$lx Y=$ly RX=$rx RY=$ry L2=$lt R2=$rt")
-        if(!select(event.deviceId,event.device,listOf(lx,ly,rx,ry).any { abs(it)>.05f } || lt>=.6f || rt>=.6f))return false
+        val left=vm.stickConfigs[0].map((lx*1000).roundToInt(),(-ly*1000).roundToInt())
+        val right=vm.stickConfigs[1].map((rx*1000).roundToInt(),(-ry*1000).roundToInt())
+        if(!select(event.deviceId,event.device,left!=(0 to 0) || right!=(0 to 0) || lt>=.6f || rt>=.6f))return false
         vm.axes(true,(lx*1000).roundToInt(),(-ly*1000).roundToInt())
         vm.axes(false,(rx*1000).roundToInt(),(-ry*1000).roundToInt())
         if(buttons.trigger(GamepadButton.L2,lt))vm.gamepadPress(GamepadButton.L2)

@@ -58,6 +58,10 @@ class ControllerUiTest {
             gamepadMotion(0f,0f)
             assertEquals(0,model().controls.lx)
             assertTrue(model().gamepadInputInfo.contains("id=-1"))
+            GamepadInput::class.java.getDeclaredField("deviceId").apply { isAccessible=true }.set(input,9876)
+            model().setStickConfig(0,JoystickConfig(deadZonePercent=0))
+            gamepadMotion(0f,.01f)
+            assertEquals(10,model().controls.lx)
             input.onInputDeviceRemoved(-1)
         }
     }
