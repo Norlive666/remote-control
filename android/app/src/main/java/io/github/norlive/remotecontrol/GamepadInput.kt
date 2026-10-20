@@ -18,7 +18,7 @@ internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : 
     fun focus(value: Boolean) { focused=value;if(!value){buttons.clear();vm.suspendGamepad()} }
     private fun isGamepad(device: InputDevice)=device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK)
     private fun refresh() {
-        val devices=manager.inputDeviceIds.mapNotNull(manager::getInputDevice).filter(::isGamepad)
+        val devices=manager.inputDeviceIds.toList().mapNotNull(manager::getInputDevice).filter(::isGamepad)
         val selected=devices.firstOrNull { it.id==deviceId } ?: devices.firstOrNull()
         if(selected?.id!=deviceId) { buttons.clear();vm.suspendGamepad() }
         deviceId=selected?.id;vm.gamepadDevice(selected?.name)
