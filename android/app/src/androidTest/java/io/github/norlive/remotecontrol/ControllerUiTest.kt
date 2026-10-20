@@ -28,6 +28,10 @@ class ControllerUiTest {
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
     }
+    @Test fun gamepadMappingSettingsAreAvailable() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithText("手柄按键映射").assertExists()
+    }
     @Test fun scannerRequestsLocationLikeBtMcu() {
         compose.runOnIdle {
             assertTrue(model().permissions().contains(Manifest.permission.ACCESS_FINE_LOCATION))
