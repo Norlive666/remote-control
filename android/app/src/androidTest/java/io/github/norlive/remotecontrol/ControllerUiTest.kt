@@ -33,15 +33,33 @@ class ControllerUiTest {
         val event=android.view.KeyEvent(now,now,action,code,repeat,0,-1,0,0,android.view.InputDevice.SOURCE_GAMEPAD)
         compose.activity.dispatchKeyEvent(event)
     }
-    private fun gamepadMotion(trigger: Float,x: Float=0f) {
+    private fun gamepadMotion(trigger: Float,x: Float=0f,deviceId: Int=-1) {
         val properties=android.view.MotionEvent.PointerProperties().apply { id=0 }
         val coords=android.view.MotionEvent.PointerCoords().apply {
             setAxisValue(android.view.MotionEvent.AXIS_LTRIGGER,trigger)
             setAxisValue(android.view.MotionEvent.AXIS_X,x)
         }
         val now=android.os.SystemClock.uptimeMillis()
-        val event=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_MOVE,1,arrayOf(properties),arrayOf(coords),0,0,1f,1f,-1,0,android.view.InputDevice.SOURCE_JOYSTICK,0)
+        val event=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_MOVE,1,arrayOf(properties),arrayOf(coords),0,0,1f,1f,deviceId,0,android.view.InputDevice.SOURCE_JOYSTICK,0)
         try { compose.activity.dispatchGenericMotionEvent(event) } finally { event.recycle() }
+    }
+    @Test fun firstListedVirtualDeviceCannotBlockRealJoystickOrStealItWithIdleMotion() {
+        compose.runOnIdle {
+            compose.activity.onWindowFocusChanged(true)
+            val input=compose.activity.gamepad
+            GamepadInput::class.java.getDeclaredField("deviceId").apply { isAccessible=true }.set(input,9876)
+            model().gamepadDevice("uinput-xiaomi")
+            gamepadMotion(0f,.8f)
+            assertTrue(model().controls.lx>0)
+            assertNotEquals("uinput-xiaomi",model().gamepadName)
+            val x=model().controls.lx
+            gamepadMotion(0f,0f,9876)
+            assertEquals(x,model().controls.lx)
+            gamepadMotion(0f,0f)
+            assertEquals(0,model().controls.lx)
+            assertTrue(model().gamepadInputInfo.contains("id=-1"))
+            input.onInputDeviceRemoved(-1)
+        }
     }
     @Test fun gamepadPressSetsSliderReleaseHoldsAndRepeatCannotOverwriteTouch() {
         compose.runOnIdle {

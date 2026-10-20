@@ -25,11 +25,13 @@ internal fun GamepadSettings(vm: RemoteViewModel) {
                     Text("手柄按键映射",fontWeight=FontWeight.Bold)
                     TextButton({open=false},modifier=Modifier.testTag("gamepad-done")){Text("完成")}
                 }
-                Text("手柄：${vm.gamepadName ?: "未检测到"}")
+                Text("手柄：${vm.gamepadName ?: "等待摇杆或按键输入"}")
                 Text("X5 Lite 请使用安卓模式（深蓝灯），通过 Type-C 连接。左右摇杆沿用面板设置。")
                 Text("按下设值，松开保持。扳机达到 60% 触发，回到 40% 后可再次触发。")
                 Text("拔出、切后台或打开弹窗会关闭使能并清零，返回后需手动使能。")
                 Text("最近按键：${vm.lastGamepadInput}")
+                Text("最近输入事件：${vm.gamepadInputInfo}")
+                Text("关闭弹窗后拨动摇杆或按键以自动识别设备；设备名由安卓系统提供，不按名称过滤。")
                 GamepadButton.entries.forEach { button ->
                     val saved=vm.gamepadBindings.getValue(button)
                     var target by remember(saved,vm.sliderConfigs) { mutableStateOf(saved.slider) }

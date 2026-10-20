@@ -88,6 +88,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         GamepadBinding(slider,value).reconcile(sliderConfigs)
     }); private set
     var gamepadName by mutableStateOf<String?>(null); private set
+    var gamepadInputInfo by mutableStateOf("尚未收到手柄事件"); private set
     var lastGamepadInput by mutableStateOf("尚未操作"); private set
     init { sliderConfigs.forEachIndexed { i,config -> session.slider(i,config.map(0)) };sync() }
     private var transport: BluetoothTransport?=null
@@ -280,6 +281,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         gamepadBindings=gamepadBindings.mapValues { (_,binding) -> binding.reconcile(sliderConfigs) }
         saveGamepadBindings();sync()
     }
+    fun gamepadEvent(description: String) { gamepadInputInfo=description }
     fun gamepadDevice(name: String?) { gamepadName=name }
     fun gamepadPress(button: GamepadButton) {
         if(!foreground || layoutEditing)return
