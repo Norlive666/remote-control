@@ -44,8 +44,15 @@ internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : 
             else -> return false
         }
         if(!select(event.deviceId,event.device))return false
-        if(event.action==KeyEvent.ACTION_UP)buttons.key(button,false)
-        else if(event.action==KeyEvent.ACTION_DOWN && event.repeatCount==0 && buttons.key(button,true))vm.gamepadPress(button)
+        val device=event.device
+        val triggerAxes=when(button) {
+            GamepadButton.L2 -> listOf(MotionEvent.AXIS_LTRIGGER,MotionEvent.AXIS_BRAKE)
+            GamepadButton.R2 -> listOf(MotionEvent.AXIS_RTRIGGER,MotionEvent.AXIS_GAS)
+            else -> emptyList()
+        }
+        val analog=triggerAxes.any { device?.getMotionRange(it)!=null }
+        if(event.action==KeyEvent.ACTION_UP)buttons.key(button,false,analog)
+        else if(event.action==KeyEvent.ACTION_DOWN && event.repeatCount==0 && buttons.key(button,true,analog))vm.gamepadPress(button)
         return true
     }
     fun motion(event: MotionEvent): Boolean {

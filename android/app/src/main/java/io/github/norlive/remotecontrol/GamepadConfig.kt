@@ -20,7 +20,10 @@ fun defaultGamepadBindings(configs: List<SliderConfig>): Map<GamepadButton,Gamep
 class GamepadButtons {
     private val digital=mutableSetOf<GamepadButton>()
     private val analog=mutableSetOf<GamepadButton>()
-    fun key(button: GamepadButton,pressed: Boolean): Boolean = update(button,pressed,digital)
+    fun key(button: GamepadButton,pressed: Boolean,hasAnalogTrigger: Boolean=false): Boolean {
+        if(hasAnalogTrigger && (button==GamepadButton.L2 || button==GamepadButton.R2))return false
+        return update(button,pressed,digital)
+    }
     fun trigger(button: GamepadButton,value: Float): Boolean {
         val pressed=if(button in analog)value>.4f else value>=.6f
         return update(button,pressed,analog)

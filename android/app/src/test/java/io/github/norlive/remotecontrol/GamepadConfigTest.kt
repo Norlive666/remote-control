@@ -47,6 +47,16 @@ class GamepadConfigTest {
         assertFalse(buttons.trigger(GamepadButton.L2,.4f))
         assertTrue(buttons.trigger(GamepadButton.L2,.7f))
     }
+    @Test fun analogTriggerIgnoresEarlyDigitalPressAndRelease() {
+        val buttons=GamepadButtons()
+        assertFalse(buttons.key(GamepadButton.L2,true,hasAnalogTrigger=true))
+        assertFalse(buttons.trigger(GamepadButton.L2,.3f))
+        assertTrue(buttons.trigger(GamepadButton.L2,.6f))
+        assertFalse(buttons.key(GamepadButton.L2,false,hasAnalogTrigger=true))
+        assertFalse(buttons.trigger(GamepadButton.L2,.5f))
+        assertFalse(buttons.trigger(GamepadButton.L2,.4f))
+        assertTrue(buttons.trigger(GamepadButton.L2,.7f))
+    }
     @Test fun clearingHeldInputAllowsNextPress() {
         val buttons=GamepadButtons();assertTrue(buttons.key(GamepadButton.Y,true))
         buttons.clear();assertTrue(buttons.key(GamepadButton.Y,true))
