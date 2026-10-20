@@ -6,7 +6,7 @@
 
 ## 下载与开始测试
 
-安装 APK：[v1.4.2 下载](https://github.com/Norlive666/remote-control/releases/download/v1.4.2/remote-control-v1.4.2.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+安装 APK：[v1.5.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.5.0/remote-control-v1.5.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
 驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.0.0/remote-control-stm32-v2.0.0.zip)。
 
