@@ -162,3 +162,16 @@ APK SHA-256：`cdf560fc3bfec20e9e6002ad6b390abcc59411e907419c0fd3880ec4da1c1c72`
 - SHA-256：`f4bf7b4e1d68a1d8b83d5455865cc85253d580e9e83837bac6089bcbe62f7401`；已核对GitHub Release资产摘要一致。
 
 此轮未连接X5 Lite或真实安卓手机。模拟事件验证不能代替实物USB识别、具体摇杆轴/扳机上报、蓝牙链路与STM32实际接收验证。
+
+
+## v1.5.1 手柄设备选择修复（2026-10-20）
+
+源码`6b64724a1222219a0cd64bdc0ab4871fc649f780`通过[Actions 39443383884](https://github.com/Norlive666/remote-control/actions/runs/39443383884)，三个任务均成功。
+
+- 44项单元测试、32项Android 15横屏界面测试，失败、错误和跳过均为0；STM32回归任务通过。
+- 在本机用真实GamepadInput和最小Android依赖模拟复现首项uinput-xiaomi锁定后拒绝另一ID真实摇杆的路径，修复前失败、修复后通过；零死区首次1%输入另行先失败后通过。
+- 新增Android回归覆盖：错误旧设备ID占用→真实输入接管→旧设备空闲零值不抢选→当前设备回零，以及首次接管遵循零死区配置。
+- 本机签名APK versionName=1.5.1、versionCode=11，10824718字节，v2/v3签名与对齐校验通过，证书保持一致。
+- SHA-256：`4b95be1712a67a5292f5fc17c7ec36c0ee4afe05b83745041efb09f1bc6d8dfb`，已核对GitHub公开资产摘要。
+
+此轮未连接用户小米手机或X5 Lite。自动测试确认代码拦截缺陷已修复，不代表已经证明用户实机无响应仅由此缺陷导致。新版的设备名、事件ID/输入源与原始轴值用于进一步实测定位；未按uinput-xiaomi名称屏蔽输入。
