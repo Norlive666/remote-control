@@ -21,12 +21,94 @@ class ControllerUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { changeMode(LinkMode.BLE_UART);beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig()) } }
+        compose.runOnIdle { model().apply { changeMode(LinkMode.BLE_UART);beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("编辑布局").performClick()
+    }
+    private fun gamepadKey(code: Int,action: Int=android.view.KeyEvent.ACTION_DOWN,repeat: Int=0) {
+        val now=android.os.SystemClock.uptimeMillis()
+        val event=android.view.KeyEvent(now,now,action,code,repeat,0,-1,0,0,android.view.InputDevice.SOURCE_GAMEPAD)
+        compose.activity.dispatchKeyEvent(event)
+    }
+    private fun gamepadMotion(trigger: Float,x: Float=0f) {
+        val properties=android.view.MotionEvent.PointerProperties().apply { id=0 }
+        val coords=android.view.MotionEvent.PointerCoords().apply {
+            setAxisValue(android.view.MotionEvent.AXIS_LTRIGGER,trigger)
+            setAxisValue(android.view.MotionEvent.AXIS_X,x)
+        }
+        val now=android.os.SystemClock.uptimeMillis()
+        val event=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_MOVE,1,arrayOf(properties),arrayOf(coords),0,0,1f,1f,-1,0,android.view.InputDevice.SOURCE_JOYSTICK,0)
+        try { compose.activity.dispatchGenericMotionEvent(event) } finally { event.recycle() }
+    }
+    @Test fun gamepadPressSetsSliderReleaseHoldsAndRepeatCannotOverwriteTouch() {
+        compose.runOnIdle {
+            compose.activity.onWindowFocusChanged(true)
+            gamepadKey(android.view.KeyEvent.KEYCODE_BUTTON_Y)
+            assertEquals(1,model().controls.slider1)
+            gamepadKey(android.view.KeyEvent.KEYCODE_BUTTON_Y,android.view.KeyEvent.ACTION_UP)
+            assertEquals(1,model().controls.slider1)
+            gamepadKey(android.view.KeyEvent.KEYCODE_BUTTON_Y)
+            model().slider(0,1000)
+            gamepadKey(android.view.KeyEvent.KEYCODE_BUTTON_Y,repeat=1)
+            assertEquals(2,model().controls.slider1)
+            compose.activity.gamepad.onInputDeviceRemoved(-1)
+        }
+    }
+    @Test fun gamepadTriggerIsDigitalAndAxesUseExistingConfiguration() {
+        compose.runOnIdle {
+            compose.activity.onWindowFocusChanged(true)
+            model().setStickConfig(0,JoystickConfig(deadZonePercent=10,maxValue=200,mode=JoystickMode.HORIZONTAL))
+            gamepadMotion(.59f,.5f);assertEquals(0,model().controls.slider1)
+            gamepadMotion(.65f,.5f);assertEquals(2,model().controls.slider1)
+            assertEquals(89,model().controls.lx);assertEquals(0,model().controls.ly)
+            model().slider(0,0)
+            gamepadMotion(.8f);assertEquals(0,model().controls.slider1)
+            gamepadMotion(.3f);gamepadMotion(.7f);assertEquals(2,model().controls.slider1)
+            compose.activity.gamepad.onInputDeviceRemoved(-1)
+        }
+    }
+    @Test fun customGamepadBindingsPersistReconcileAndRestoreDefaults() {
+        compose.runOnIdle {
+            val vm=model()
+            vm.setSliderConfig(1,SliderConfig(stepped=false))
+            vm.setGamepadBinding(GamepadButton.X,GamepadBinding(1,725))
+            assertEquals(GamepadBinding(1,725),RemoteViewModel(compose.activity.application).gamepadBindings[GamepadButton.X])
+            vm.gamepadPress(GamepadButton.X);assertEquals(725,vm.controls.slider2)
+            vm.setSliderConfig(1,SliderConfig(values=listOf(10,20,30)))
+            assertEquals(GamepadBinding(1,10),vm.gamepadBindings[GamepadButton.X])
+            assertEquals(GamepadBinding(1,10),RemoteViewModel(compose.activity.application).gamepadBindings[GamepadButton.X])
+            vm.resetGamepadBindings();assertEquals(GamepadBinding(0,0),vm.gamepadBindings[GamepadButton.X])
+            assertEquals(GamepadBinding(1,20),vm.gamepadBindings[GamepadButton.R1])
+        }
+    }
+    @Test fun gamepadRemovalAndFocusLossClearControlsAndBlockInput() {
+        compose.runOnIdle {
+            compose.activity.onWindowFocusChanged(true)
+            gamepadMotion(.8f,.8f)
+            assertTrue(model().controls.lx>0);assertEquals(2,model().controls.slider1)
+            compose.activity.onWindowFocusChanged(false)
+            assertEquals(0,model().controls.lx);assertEquals(0,model().controls.slider1);assertFalse(model().controls.enabled)
+            gamepadKey(android.view.KeyEvent.KEYCODE_BUTTON_Y)
+            assertEquals(0,model().controls.slider1)
+            compose.activity.onWindowFocusChanged(true)
+            gamepadKey(android.view.KeyEvent.KEYCODE_BUTTON_Y);assertEquals(1,model().controls.slider1)
+            compose.activity.gamepad.onInputDeviceRemoved(-1)
+            assertEquals(0,model().controls.slider1);assertNull(model().gamepadName)
+        }
+    }
+    @Test fun gamepadSettingsCanEditSaveAndRestoreMapping() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("gamepad-settings").performClick()
+        compose.onNodeWithTag("gamepad-value-X").performScrollTo().performClick()
+        compose.onNodeWithText("数值 2").performClick()
+        compose.onNodeWithTag("gamepad-apply-X").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(GamepadBinding(0,2),model().gamepadBindings[GamepadButton.X]) }
+        compose.onNodeWithTag("gamepad-defaults").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(GamepadBinding(0,0),model().gamepadBindings[GamepadButton.X]) }
+        compose.onNodeWithTag("gamepad-done").performScrollTo().performClick()
     }
     @Test fun gamepadMappingSettingsAreAvailable() {
         compose.onNodeWithTag("panel-settings").performClick()

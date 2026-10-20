@@ -82,6 +82,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         val values=if(parsed.size in 2..8 && parsed.distinct().size==parsed.size && parsed.all { it!=null && it in 0..1000 })parsed.map { it!! } else listOf(0,1,2)
         SliderConfig(preferences.getBoolean("slider.$index.stepped",true),values)
     }); private set
+    var gamepadBindings by mutableStateOf(defaultGamepadBindings(sliderConfigs).mapValues { (button,fallback) ->
+        val slider=preferences.getInt("gamepad.${button.name}.slider",fallback.slider).coerceIn(0,1)
+        val value=preferences.getInt("gamepad.${button.name}.value",fallback.value).coerceIn(0,1000)
+        GamepadBinding(slider,value).reconcile(sliderConfigs)
+    }); private set
+    var gamepadName by mutableStateOf<String?>(null); private set
+    var lastGamepadInput by mutableStateOf("尚未操作"); private set
     init { sliderConfigs.forEachIndexed { i,config -> session.slider(i,config.map(0)) };sync() }
     private var transport: BluetoothTransport?=null
     private var connectJob: Job?=null
@@ -269,8 +276,28 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         sliderConfigs=sliderConfigs.mapIndexed { i,current -> if(i==index)config else current }
         preferences.edit().putBoolean("slider.$index.stepped",config.stepped)
             .putString("slider.$index.values",config.values.joinToString(",")).apply()
-        session.slider(index,config.map(0));sync()
+        session.slider(index,config.map(0))
+        gamepadBindings=gamepadBindings.mapValues { (_,binding) -> binding.reconcile(sliderConfigs) }
+        saveGamepadBindings();sync()
     }
+    fun gamepadDevice(name: String?) { gamepadName=name }
+    fun gamepadPress(button: GamepadButton) {
+        if(!foreground || layoutEditing)return
+        val binding=gamepadBindings.getValue(button)
+        session.slider(binding.slider,binding.value)
+        lastGamepadInput="${button.title} → 滑块 ${binding.slider+1} = ${binding.value}"
+        sync()
+    }
+    fun setGamepadBinding(button: GamepadButton,binding: GamepadBinding) {
+        gamepadBindings=gamepadBindings+(button to binding.reconcile(sliderConfigs));saveGamepadBindings()
+    }
+    fun resetGamepadBindings() { gamepadBindings=defaultGamepadBindings(sliderConfigs);saveGamepadBindings() }
+    private fun saveGamepadBindings() {
+        val editor=preferences.edit()
+        gamepadBindings.forEach { (button,binding) -> editor.putInt("gamepad.${button.name}.slider",binding.slider).putInt("gamepad.${button.name}.value",binding.value) }
+        editor.apply()
+    }
+    fun suspendGamepad() { session.suspendControl();sync() }
     fun enable(value: Boolean) {
         if(value && (!connected || !foreground || layoutEditing))return
         session.enable(value)

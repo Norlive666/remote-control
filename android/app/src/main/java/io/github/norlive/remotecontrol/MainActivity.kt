@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
+import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -56,6 +58,7 @@ internal val Pad=Color(0xffeaf1f8)
 
 class MainActivity : ComponentActivity() {
     private val model: RemoteViewModel by viewModels()
+    internal val gamepad by lazy { GamepadInput(this,model) }
     private val permissionRequest=registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if(result.values.all { it })model.refreshDevices() else model.error("请在系统应用设置中允许附近设备和精确位置权限，定位权限仅用于蓝牙搜索")
     }
@@ -76,8 +79,11 @@ class MainActivity : ComponentActivity() {
         val missing=model.permissions(granted)
         if(missing.isEmpty())model.refreshDevices() else permissionRequest.launch(missing)
     }
-    override fun onStart() { super.onStart();model.foreground(true) }
-    override fun onStop() { model.foreground(false);super.onStop() }
+    override fun onStart() { super.onStart();model.foreground(true);gamepad.start() }
+    override fun onStop() { gamepad.stop();model.foreground(false);super.onStop() }
+    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus);gamepad.focus(hasFocus) }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepad.key(event) || super.dispatchKeyEvent(event)
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean = gamepad.motion(event) || super.dispatchGenericMotionEvent(event)
 }
 
 @Composable
@@ -153,6 +159,7 @@ private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Uni
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose){Text("完成")} }
                 OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
+                GamepadSettings(vm)
                 SliderSettings(vm)
                 vm.stickConfigs.forEachIndexed { index,config ->
                     var deadZone by remember(config) { mutableStateOf(config.deadZonePercent.toFloat()) }
