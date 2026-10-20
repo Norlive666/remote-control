@@ -15,7 +15,7 @@ internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : 
     private var focused=true
     fun start() { running=true;manager.registerInputDeviceListener(this,null);refresh() }
     fun stop() { running=false;manager.unregisterInputDeviceListener(this);buttons.clear();vm.suspendGamepad() }
-    fun focus(value: Boolean) { focused=value;if(!value){buttons.clear();vm.suspendGamepad()} }
+    fun focus(value: Boolean) { focused=value;if(!value){buttons.clear();if(deviceId!=null)vm.suspendGamepad()} }
     private fun isGamepad(device: InputDevice)=device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK)
     private fun refresh() {
         val devices=manager.inputDeviceIds.toList().mapNotNull(manager::getInputDevice).filter(::isGamepad)
@@ -60,7 +60,7 @@ internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : 
         if(!select(event.deviceId,event.device))return false
         fun axis(preferred: Int,fallback: Int): Float {
             val device=event.device
-            val selected=if(device==null || device.getMotionRange(preferred)!=null)preferred else fallback
+            val selected=if(device?.getMotionRange(preferred)!=null || device?.getMotionRange(fallback)==null)preferred else fallback
             return event.getAxisValue(selected)
         }
         vm.axes(true,(event.getAxisValue(MotionEvent.AXIS_X)*1000).roundToInt(),(-event.getAxisValue(MotionEvent.AXIS_Y)*1000).roundToInt())

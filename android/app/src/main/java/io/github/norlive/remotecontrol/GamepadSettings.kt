@@ -65,7 +65,7 @@ private fun GamepadChoice(label: String,tag: String,choices: List<String>,onSele
     Box {
         OutlinedButton({expanded=true},modifier=Modifier.testTag(tag)){Text(label)}
         DropdownMenu(expanded,{expanded=false}) {
-            choices.forEachIndexed { index,title -> DropdownMenuItem(text={Text(title)},onClick={expanded=false;onSelect(index)}) }
+            choices.forEachIndexed { index,title -> DropdownMenuItem(text={Text(title)},onClick={expanded=false;onSelect(index)},modifier=Modifier.testTag("$tag-option-$index")) }
         }
     }
 }

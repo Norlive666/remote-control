@@ -103,7 +103,7 @@ class ControllerUiTest {
         compose.onNodeWithTag("panel-settings").performClick()
         compose.onNodeWithTag("gamepad-settings").performClick()
         compose.onNodeWithTag("gamepad-value-X").performScrollTo().performClick()
-        compose.onNodeWithText("数值 2").performClick()
+        compose.onNodeWithTag("gamepad-value-X-option-2").performClick()
         compose.onNodeWithTag("gamepad-apply-X").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(GamepadBinding(0,2),model().gamepadBindings[GamepadButton.X]) }
         compose.onNodeWithTag("gamepad-defaults").performScrollTo().performClick()
