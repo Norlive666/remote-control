@@ -5,6 +5,10 @@
 #else
 #include "stm32f1xx_hal.h"
 #endif
+#ifdef STM32H723xx
+void USART3_IRQHandler(void) {}
+void TIM5_IRQHandler(void) {}
+#endif
 void USART1_IRQHandler(void) {}
 void TIM4_IRQHandler(void) {}
 uint32_t HAL_RCC_GetPCLK1Freq(void) { return 36000000; }

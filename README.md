@@ -8,7 +8,7 @@
 
 安装 APK：[v1.5.1 下载](https://github.com/Norlive666/remote-control/releases/download/v1.5.1/remote-control-v1.5.1.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.0.0/remote-control-stm32-v2.0.0.zip)。
+驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.1.0/remote-control-stm32-v2.1.0.zip)。
 
 1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入对应芯片的两个源文件。
 2. **BLE 串口**（默认）：扫描并连接 FFE0 / FFE1 模块，UART 为 9600、8N1 时 STM32 调用 `RC_Init()`。旧版保存的 HC-05 经典模式自动回落到 BLE 串口；本版已移除经典 SPP 连接。
@@ -57,7 +57,7 @@ if (state.link_valid && state.enabled && !state.stopped) {
 }
 ```
 
-默认 USART1：PA9 TX → 模块 RX，PA10 RX ← 模块 TX，共地；UART 电平为 3.3V。模块供电须按裸模块或底板规格接入。驱动初始化 GPIO、USART1、TIM4 和 NVIC，不需 CubeMX 另外配置这些外设。不依赖生成的 `uart.c`、`tim.c` 或 HAL UART/TIM 模块。**启动文件、基础 HAL/RCC 和系统时钟仍由原工程提供。**USART1、PA9/PA10、TIM4 由此驱动独占；已有生成的 IRQ 入口无需修改。原工程已经启用 USART1/TIM4 时返回 `HAL_BUSY` 并保留原状态，详见 [接入文档](docs/stm32.md)。
+H723：USART3，PD8 TX → 模块 RX、PD9 RX ← 模块 TX，TIM5。F103：USART1，PA9 TX → 模块 RX、PA10 RX ← 模块 TX，TIM4。两端共地，UART 电平3.3V，模块供电按模块规格。驱动自动初始化对应GPIO、USART、定时器和NVIC，无需CubeMX配置或生成uart.c/tim.c，无需UART/TIM HAL模块。基础HAL/RCC（H723包括RCCEx）、启动文件和系统时钟仍由原工程提供。所选外设已占用时返回HAL_BUSY并保留原状态；已有生成IRQ入口无需修改。H723原USART1/TIM4不再由本驱动占用，详见[接入文档](docs/stm32.md)。
 
 ## 协议和构建
 

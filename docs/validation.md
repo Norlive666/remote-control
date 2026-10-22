@@ -175,3 +175,10 @@ APK SHA-256：`cdf560fc3bfec20e9e6002ad6b390abcc59411e907419c0fd3880ec4da1c1c72`
 - SHA-256：`4b95be1712a67a5292f5fc17c7ec36c0ee4afe05b83745041efb09f1bc6d8dfb`，已核对GitHub公开资产摘要。
 
 此轮未连接用户小米手机或X5 Lite。自动测试确认代码拦截缺陷已修复，不代表已经证明用户实机无响应仅由此缺陷导致。新版的设备名、事件ID/输入源与原始轴值用于进一步实测定位；未按uinput-xiaomi名称屏蔽输入。
+
+
+## STM32驱动v2.1.0：H723 USART3/PD8/PD9/TIM5（2026-10-22）
+
+H723改为USART3 PD8 TX、PD9 RX（AF7），USART3内核时钟读取RCC_PERIPHCLK_USART3，TIM5约1ms；占用检查、私有中断和RAM向量同步迁移。初始化API、波特率、协议和全局结构体不变；F103驱动未修改。
+
+已用本机工程的官方ST依赖执行两套协议解析测试、28项初始化模拟测试及两目标ARM编译/与生成强IRQ入口共存链接，全部通过。测试先确认旧H723错误读取USART1内核时钟而失败，再迁移驱动；覆盖USART3/TIM5时钟或IRQ占用拒绝，以及原USART1/TIM4启用时新驱动仍正常且旧外设、GPIOA、旧IRQ不变。未烧录或验证真实UART波形、收包及1ms周期。

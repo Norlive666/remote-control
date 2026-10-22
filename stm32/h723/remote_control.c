@@ -120,22 +120,22 @@ static uint32_t timer_clock(void) {
 #endif
 }
 static int occupied(void) {
-    if (RCC->APB2ENR & RCC_APB2ENR_USART1EN) return 1;
+    if (RCC->APB1LENR & RCC_APB1LENR_USART3EN) return 1;
 #ifdef RC_H723
-    if (RCC->APB1LENR & RCC_APB1LENR_TIM4EN) return 1;
+    if (RCC->APB1LENR & RCC_APB1LENR_TIM5EN) return 1;
 #else
     if (RCC->APB1ENR & RCC_APB1ENR_TIM4EN) return 1;
-    /* A remapped USART1 cannot use PA9/PA10 without changing shared AFIO state. */
+    /* A remapped USART3 cannot use PA9/PA10 without changing shared AFIO state. */
     if ((RCC->APB2ENR & RCC_APB2ENR_AFIOEN) && (AFIO->MAPR & AFIO_MAPR_USART1_REMAP)) return 1;
 #endif
-    return NVIC_GetEnableIRQ(USART1_IRQn) || NVIC_GetEnableIRQ(TIM4_IRQn);
+    return NVIC_GetEnableIRQ(USART3_IRQn) || NVIC_GetEnableIRQ(TIM5_IRQn);
 }
 static void install_vectors(void) {
     const uint32_t *original=(const uint32_t *)(uintptr_t)SCB->VTOR;
     unsigned i;
     for (i=0;i<RC_VECTOR_COUNT;i++) vectors[i]=original[i];
-    vectors[16u+USART1_IRQn]=(uint32_t)(uintptr_t)uart_irq;
-    vectors[16u+TIM4_IRQn]=(uint32_t)(uintptr_t)timer_irq;
+    vectors[16u+USART3_IRQn]=(uint32_t)(uintptr_t)uart_irq;
+    vectors[16u+TIM5_IRQn]=(uint32_t)(uintptr_t)timer_irq;
 #ifdef RC_H723
     if (SCB->CCR & SCB_CCR_DC_Msk) SCB_CleanDCache_by_Addr(vectors,(int32_t)sizeof(vectors));
 #endif
@@ -157,7 +157,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     }
     if (occupied()) { unlock(key); return HAL_BUSY; }
 #ifdef RC_H723
-    uart_clock=HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART1);
+    uart_clock=HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART3);
 #else
     uart_clock=HAL_RCC_GetPCLK2Freq();
 #endif
@@ -177,42 +177,42 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
         unlock(key); return HAL_BUSY;
     }
 #endif
-    __HAL_RCC_GPIOA_CLK_ENABLE(); __HAL_RCC_USART1_CLK_ENABLE(); __HAL_RCC_TIM4_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE(); __HAL_RCC_USART3_CLK_ENABLE(); __HAL_RCC_TIM5_CLK_ENABLE();
 #ifdef RC_H723
-    MODIFY_REG(GPIOA->OTYPER,(1u<<9)|(1u<<10),0);
-    MODIFY_REG(GPIOA->OSPEEDR,15u<<18,0);
-    MODIFY_REG(GPIOA->PUPDR,15u<<18,4u<<18); /* RX pull-up, TX no pull. */
-    MODIFY_REG(GPIOA->AFR[1],0xff0u,0x770u); /* AF7 on PA9/PA10. */
-    MODIFY_REG(GPIOA->MODER,15u<<18,10u<<18);
+    MODIFY_REG(GPIOD->OTYPER,(1u<<8)|(1u<<9),0);
+    MODIFY_REG(GPIOD->OSPEEDR,15u<<16,0);
+    MODIFY_REG(GPIOD->PUPDR,15u<<16,4u<<16); /* RX pull-up, TX no pull. */
+    MODIFY_REG(GPIOD->AFR[1],0xffu,0x77u); /* AF7 on PD8/PD9. */
+    MODIFY_REG(GPIOD->MODER,15u<<16,10u<<16);
 #else
     MODIFY_REG(GPIOA->CRH,0xff0u,0x8b0u); /* PA9 AF push-pull; PA10 input pull-up. */
     GPIOA->BSRR=1u<<10;
 #endif
-    USART1->CR1=0; USART1->CR2=0; USART1->CR3=0;
+    USART3->CR1=0; USART3->CR2=0; USART3->CR3=0;
 #ifdef RC_H723
-    USART1->PRESC=0;
-    USART1->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
-    USART1->RQR=USART_RQR_RXFRQ;
+    USART3->PRESC=0;
+    USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
+    USART3->RQR=USART_RQR_RXFRQ;
 #else
-    (void)USART1->SR; (void)USART1->DR;
+    (void)USART3->SR; (void)USART3->DR;
 #endif
-    USART1->BRR=brr;
-    TIM4->CR1=0; TIM4->CR2=0; TIM4->SMCR=0; TIM4->DIER=0; TIM4->CCER=0;
-    TIM4->PSC=divisor-1u; TIM4->ARR=period-1u;
-    TIM4->EGR=TIM_EGR_UG; TIM4->SR=0; TIM4->CNT=0;
+    USART3->BRR=brr;
+    TIM5->CR1=0; TIM5->CR2=0; TIM5->SMCR=0; TIM5->DIER=0; TIM5->CCER=0;
+    TIM5->PSC=divisor-1u; TIM5->ARR=period-1u;
+    TIM5->EGR=TIM_EGR_UG; TIM5->SR=0; TIM5->CNT=0;
     RC_Reset();
     install_vectors();
-    NVIC_ClearPendingIRQ(USART1_IRQn); NVIC_ClearPendingIRQ(TIM4_IRQn);
-    NVIC_SetPriority(USART1_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
-    NVIC_SetPriority(TIM4_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
+    NVIC_ClearPendingIRQ(USART3_IRQn); NVIC_ClearPendingIRQ(TIM5_IRQn);
+    NVIC_SetPriority(USART3_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
+    NVIC_SetPriority(TIM5_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
 #ifdef RC_H723
-    USART1->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE_RXFNEIE;
+    USART3->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE_RXFNEIE;
 #else
-    USART1->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE;
+    USART3->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE;
 #endif
-    TIM4->DIER=TIM_DIER_UIE; TIM4->CR1=TIM_CR1_CEN;
+    TIM5->DIER=TIM_DIER_UIE; TIM5->CR1=TIM_CR1_CEN;
     initialized_baud=baud;
-    NVIC_EnableIRQ(USART1_IRQn); NVIC_EnableIRQ(TIM4_IRQn);
+    NVIC_EnableIRQ(USART3_IRQn); NVIC_EnableIRQ(TIM5_IRQn);
     unlock(key);
     return HAL_OK;
 }
@@ -220,23 +220,23 @@ HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(9600); }
 HAL_StatusTypeDef RC_InitBT630(void) { return RC_InitBaud(115200); }
 static void uart_irq(void) {
 #ifdef RC_H723
-    uint32_t isr=USART1->ISR;
+    uint32_t isr=USART3->ISR;
     if (isr & USART_ISR_RXNE_RXFNE) {
-        uint8_t data=(uint8_t)USART1->RDR;
+        uint8_t data=(uint8_t)USART3->RDR;
         if (!(isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE))) RC_ProcessByte(data);
     }
-    if (isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE)) USART1->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
+    if (isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE)) USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
 #else
-    uint32_t sr=USART1->SR;
+    uint32_t sr=USART3->SR;
     if (sr & (USART_SR_RXNE|USART_SR_ORE|USART_SR_FE|USART_SR_NE|USART_SR_PE)) {
-        uint8_t data=(uint8_t)USART1->DR;
+        uint8_t data=(uint8_t)USART3->DR;
         if ((sr & USART_SR_RXNE) && !(sr & (USART_SR_ORE|USART_SR_FE|USART_SR_NE|USART_SR_PE))) RC_ProcessByte(data);
     }
 #endif
 }
 static void timer_irq(void) {
-    if ((TIM4->SR & TIM_SR_UIF) && (TIM4->DIER & TIM_DIER_UIE)) {
-        TIM4->SR=~(uint32_t)TIM_SR_UIF;
+    if ((TIM5->SR & TIM_SR_UIF) && (TIM5->DIER & TIM_DIER_UIE)) {
+        TIM5->SR=~(uint32_t)TIM_SR_UIF;
         RC_Tick1ms();
     }
 }
