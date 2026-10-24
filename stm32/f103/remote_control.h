@@ -10,7 +10,7 @@ typedef int HAL_StatusTypeDef;
 
 /* Project settings: edit here or override for every driver compilation. */
 #ifndef RC_DEFAULT_BAUD
-#define RC_DEFAULT_BAUD 9600U
+#define RC_DEFAULT_BAUD 115200U
 #endif
 #ifndef RC_RX_INVERT
 #define RC_RX_INVERT 0

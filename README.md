@@ -8,12 +8,12 @@
 
 安装 APK：[v1.5.1 下载](https://github.com/Norlive666/remote-control/releases/download/v1.5.1/remote-control-v1.5.1.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.2.0/remote-control-stm32-v2.2.0.zip)。
+驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.2.1/remote-control-stm32-v2.2.1.zip)。
 
 1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入对应芯片的两个源文件。
-2. **BLE 串口**（默认）：扫描并连接 FFE0 / FFE1 模块，UART 为 9600、8N1 时 STM32 调用 `RC_Init()`。旧版保存的 HC-05 经典模式自动回落到 BLE 串口；本版已移除经典 SPP 连接。
-3. **BT630**：模块应运行 UART 透传固件，UART 为 115200、8N1；App 切换 BT630 BLE 并扫描连接。STM32 调用 `RC_InitBT630()`。默认检查 FFF0 / FFF2，不要求 BLE 模块与手机先在系统中配对。
-如果模块在蓝牙调试器中以 BLE 连接，请在 App 选择「BLE 串口」，扫描连接。此模式按用户提供 [bt_mcu 的 BLE 默认配置](https://gitee.com/xie-rongji/bt_mcu/blob/master/app/src/main/java/xnj/lazydog/btcontroller/Bluetooth/BlueToothMaster.java) 使用 FFE0 / FFE1，默认 20 Hz，STM32 仍按模块实际 UART 波特率初始化（默认 `RC_Init()` 的 9600）。模块名称叫 HC-05 并不决定它使用经典蓝牙还是 BLE。若调试器配置过其他 UUID，本模式尚未支持该自定义配置。
+2. **BLE 串口**（默认）：扫描并连接 FFE0 / FFE1 模块，UART 为 9600、8N1 时 STM32 调用 `RC_InitBaud(9600)`。旧版保存的 HC-05 经典模式自动回落到 BLE 串口；本版已移除经典 SPP 连接。
+3. **BT630**：模块应运行 UART 透传固件，UART 为 115200、8N1；App 切换 BT630 BLE 并扫描连接。STM32 调用 `RC_Init()`（默认115200；也兼容 `RC_InitBT630()`）。默认检查 FFF0 / FFF2，不要求 BLE 模块与手机先在系统中配对。
+如果模块在蓝牙调试器中以 BLE 连接，请在 App 选择「BLE 串口」，扫描连接。此模式按用户提供 [bt_mcu 的 BLE 默认配置](https://gitee.com/xie-rongji/bt_mcu/blob/master/app/src/main/java/xnj/lazydog/btcontroller/Bluetooth/BlueToothMaster.java) 使用 FFE0 / FFE1，默认 20 Hz，STM32 仍按模块实际 UART 波特率初始化（例如9600时调用 `RC_InitBaud(9600)`）。模块名称叫 HC-05 并不决定它使用经典蓝牙还是 BLE。若调试器配置过其他 UUID，本模式尚未支持该自定义配置。
 
 4. 蓝牙连接成功后手动开启「使能」。松开摇杆自动归中；滑块保留位置。
 5. **调整位置和大小**：顶部「功能选项」→「编辑布局」，拖动带框的摇杆卡片、滑块、蓝牙使能卡片，蓝色摇杆区域可在整个操控画布内独立拖动，允许移到白色卡片外；点选组件或用底部菜单选择组件，再用大小滑条在 30%～250% 调整，点击「保存」。点击「取消」或返回键放弃草稿；「恢复默认」先恢复草稿，保存后才生效。滑块及卡片内容随外框等比缩放；蓝色摇杆大小可独立调整。实际最大尺寸受画布边界限制。已保存的位置和大小在重新打开 App 后保留。编辑期间关闭使能、摇杆归零，保存或取消后需手动重新使能。
@@ -48,8 +48,8 @@ v1.4.2 按 bt_mcu 同时使用系统发现与默认 BLE 扫描，按地址去重
 HAL_Init();
 SystemClock_Config();
 /* 保留已有 MX_DMA_Init()/MX_USARTx_UART_Init() 等调用，先完成全部外设初始化。 */
-if (RC_Init() != HAL_OK) Error_Handler(); /* 波特率使用头文件RC_DEFAULT_BAUD，默认9600 */
-/* BT630 将头文件RC_DEFAULT_BAUD设为115200U；也兼容RC_InitBT630()。 */
+if (RC_Init() != HAL_OK) Error_Handler(); /* 下载包默认115200，用于BT630 */
+/* H723默认接收反相=1，适用于本板D-Bus接口；直接PD9须改为0。 */
 
 RC_State_t state;
 RC_GetState(&state);
@@ -60,7 +60,7 @@ if (state.link_valid && state.enabled && !state.stopped) {
 
 H723：USART3，PD8 TX → 模块 RX、PD9 RX ← 模块 TX，TIM5。F103：USART1，PA9 TX → 模块 RX、PA10 RX ← 模块 TX，TIM4。两端共地，UART 电平3.3V，模块供电按模块规格。驱动自动初始化对应GPIO、USART、定时器和NVIC，无需CubeMX配置或生成uart.c/tim.c，无需UART/TIM HAL模块。基础HAL/RCC（H723包括RCCEx）、启动文件和系统时钟仍由原工程提供。
 
-v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。头文件 `RC_RX_INVERT` 默认为0；H723经过Q5反相的D-Bus接口必须改为1，直接连接PD9则保持0，F103不支持硬件反相。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
+v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。v2.2.1下载包的 `RC_DEFAULT_BAUD` 默认115200；H723的 `RC_RX_INVERT` 默认1，与本机实测D-Bus接口配置一致，直接连接PD9时改为0。F103默认115200、不反相，不支持硬件反相。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
 
 ## 协议和构建
 

@@ -180,9 +180,17 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[1],"default-baud")) {
         assert(RC_Init()==HAL_OK);
 #ifdef RC_H723
+#if RC_DEFAULT_BAUD == 9600U
+        assert(TEST_UART->BRR==3750); /* 36 MHz / 9600. */
+#else
         assert(TEST_UART->BRR==313); /* 36 MHz / 115200, rounded. */
+#endif
+#else
+#if RC_DEFAULT_BAUD == 9600U
+        assert(TEST_UART->BRR==7500); /* 72 MHz / 9600. */
 #else
         assert(TEST_UART->BRR==625); /* 72 MHz / 115200. */
+#endif
 #endif
     } else {
         uint32_t expected_primask=strcmp(argv[1],"unmasked") ? 1u : 0u;

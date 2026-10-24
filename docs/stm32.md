@@ -6,7 +6,7 @@
 HAL_Init();
 SystemClock_Config();
 /* 有 CubeMX 外设初始化时，先完成 MX_DMA_Init()/MX_USARTx_UART_Init() 等调用。 */
-if (RC_Init() != HAL_OK) Error_Handler();       /* 使用头文件 RC_DEFAULT_BAUD，默认9600 */
+if (RC_Init() != HAL_OK) Error_Handler();       /* 使用头文件 RC_DEFAULT_BAUD，下载包默认115200 */
 /* 或 RC_InitBT630()：FSC-BT630，115200 bit/s。其他波特率用 RC_InitBaud(baud)。 */
 
 RC_State_t state;
@@ -28,7 +28,7 @@ H723 的 PD8/PD9 AF7 定义见 [ST 数据手册](https://www.st.com/resource/en/
 ## 两文件、一行初始化
 
 1. 将对应型号的 `remote_control.c` 加入编译，将 `remote_control.h` 所在目录加入头文件搜索路径；在使用处 `#include "remote_control.h"`。
-2. 在 `HAL_Init()`、`SystemClock_Config()` 和全部 `MX_*_Init()` 之后、其他串口业务开始之前，加入 `if (RC_Init() != HAL_OK) Error_Handler();`，或者在业务程序中检查并处理返回状态。BT630 可将头文件 `RC_DEFAULT_BAUD` 改为 `115200U` 后只调用 `RC_Init()`；也兼容固定115200的 `RC_InitBT630()`，以及 `RC_InitBaud(baud)`。
+2. 在 `HAL_Init()`、`SystemClock_Config()` 和全部 `MX_*_Init()` 之后、其他串口业务开始之前，加入 `if (RC_Init() != HAL_OK) Error_Handler();`，或者在业务程序中检查并处理返回状态。下载包默认 `RC_DEFAULT_BAUD 115200U`，BT630只调用 `RC_Init()` 即可；也兼容固定115200的 `RC_InitBT630()` 和 `RC_InitBaud(baud)`。模块实际为9600时可改头文件默认值，或调用 `RC_InitBaud(9600)`。
 3. 无需 `.ioc` 中配置 对应 GPIO/USART/定时器，无需 `uart.c`、`tim.c`，无需开启 HAL UART/TIM/GPIO/DMA 模块，无需编辑中断函数。工程保留基础 HAL/RCC（H723 包括 RCCEx）、芯片 CMSIS、启动文件、链接脚本和系统时钟。
 
 驱动直接配置 对应 GPIO/USART/定时器 寄存器，不调用生成的 MSP 回调。使用私有中断函数，复制当前向量表到对齐 RAM 后仅替换所选串口、定时器两项（H723 USART3/TIM5，F103 USART1/TIM4）；不导出所选外设的生成器常用 IRQ 或 HAL 句柄名称。因此原有 `uart.c`、`tim.c` 和 `stm32xx_it.c` 可以保留并一起编译，不需要合并同名中断函数；其他中断入口和优先级分组保持不变。RAM 向量表内容占 F103 236 字节、H723 716 字节，另有链接对齐开销。H723 在数据缓存开启时清理表缓存，切换 VTOR 前后使用屏障。
@@ -38,13 +38,13 @@ H723 的 PD8/PD9 AF7 定义见 [ST 数据手册](https://www.st.com/resource/en/
 每个芯片包的 `remote_control.h` 顶部集中提供：
 
 ```c
-#define RC_DEFAULT_BAUD 9600U /* RC_Init() 使用的波特率；BT630 改为115200U。 */
-#define RC_RX_INVERT 0       /* 普通UART接线为0；H723经过Q5反相的D-Bus接口为1。 */
+#define RC_DEFAULT_BAUD 115200U /* RC_Init() 默认用于BT630。 */
+#define RC_RX_INVERT 1          /* H723下载默认，匹配本机CN14/Q5；F103为0。 */
 ```
 
 这两项可直接编辑头文件，或通过对所有驱动编译单元生效的编译参数覆盖。在 `main.c` 的 `#include` 前单独定义宏，不会改变独立编译的驱动配置。`RC_InitBT630()` 始终使用115200，`RC_InitBaud(baud)` 使用参数值；两者同样遵循接收反相配置。F103没有硬件接收反相，设置非零 `RC_RX_INVERT` 会编译失败；不要把 H723 反相头文件配置直接复制给F103。
 
-H723板卡的D-Bus接口若像本项目实测板一样，通过NPN管Q5再连接PD9，接口输入与芯片RX电平相反，应设 `RC_RX_INVERT 1`。在该实测原理图中，BT630 TXD接CN14第3脚，GND接第1脚；供电按模块/转接板规格。若绕过Q5直接接PD9，应设为0。驱动不会自动猜测电路极性。
+H723板卡的D-Bus接口若像本项目实测板一样，通过NPN管Q5再连接PD9，接口输入与芯片RX电平相反，使用下载包已默认设置的 `RC_RX_INVERT 1`。在该实测原理图中，BT630 TXD接CN14第3脚，GND接第1脚；供电按模块/转接板规格。若绕过Q5直接接PD9，应设为0。驱动不会自动猜测电路极性。
 
 | 工程情况 | 接入方式 |
 | --- | --- |

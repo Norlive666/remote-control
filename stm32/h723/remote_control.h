@@ -10,10 +10,10 @@ typedef int HAL_StatusTypeDef;
 
 /* Project settings: edit here or override for every driver compilation. */
 #ifndef RC_DEFAULT_BAUD
-#define RC_DEFAULT_BAUD 9600U
+#define RC_DEFAULT_BAUD 115200U
 #endif
 #ifndef RC_RX_INVERT
-#define RC_RX_INVERT 0 /* 1 for CN14/Q5 D-Bus input; 0 for direct PD9. */
+#define RC_RX_INVERT 1 /* 1 for CN14/Q5 D-Bus input; 0 for direct PD9. */
 #endif
 #if RC_RX_INVERT != 0 && RC_RX_INVERT != 1
 #error "RC_RX_INVERT must be 0 or 1"
