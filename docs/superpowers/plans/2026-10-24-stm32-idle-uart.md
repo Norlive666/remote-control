@@ -34,4 +34,11 @@ Files: /home/norlive/project/h723_test/User/bsp/remote_control.{c,h}, Core/Src/m
 Files: README.md, docs/stm32.md, stm32 headers, GitHub stm32-v2.2.0 release.
 - [x] Explain unconfigured/configured-idle/active cases, one-line use, two header options, ordering/exclusive UART rule, timer limits, H723 D-Bus polarity and F103 limitation.
 - [x] Request read-only review of exact diff and act on correctness findings.
-- [ ] After automated checks and board evidence, commit/push precise paths and publish ZIP with both families, license and protocol/docs. Verify uploaded hash and remote commit.
+- [x] After automated checks and board evidence, commit/push precise paths and publish ZIP with both families, license and protocol/docs. Verify uploaded hash and remote commit.
+
+## Completion evidence
+
+- Source commit: 755cae9f10d04cd069a9dd6739b268bee4a47f33; remote branch and stm32-v2.2.0 tag verified.
+- Driver release asset: 26755 bytes; SHA-256 b41f5db0da617e8c5d1236dd27d1e9d3768b7f631a8c4dc11de5bc421c53a021; GitHub reports uploaded and public.
+- User confirmed newly loaded H723 project: HAL_OK and valid_frames continuously increasing. Source remains normal polarity by default; local header selects115200/inverted for CN14.
+- 68 initialization cases, two invalid-config compile checks, two protocol suites, two official-header ARM compile/link checks passed.
