@@ -8,7 +8,7 @@
 
 安装 APK：[v1.5.1 下载](https://github.com/Norlive666/remote-control/releases/download/v1.5.1/remote-control-v1.5.1.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.1.0/remote-control-stm32-v2.1.0.zip)。
+驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.1.1/remote-control-stm32-v2.1.1.zip)。
 
 1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入对应芯片的两个源文件。
 2. **BLE 串口**（默认）：扫描并连接 FFE0 / FFE1 模块，UART 为 9600、8N1 时 STM32 调用 `RC_Init()`。旧版保存的 HC-05 经典模式自动回落到 BLE 串口；本版已移除经典 SPP 连接。

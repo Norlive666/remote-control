@@ -27,6 +27,10 @@ SCB_Type test_scb;
 uint32_t test_primask, test_enabled[163], test_priority[163], test_cache_cleans;
 static uint32_t vectors[179] __ALIGNED(1024);
 static uint32_t pclk1=36000000, pclk2=72000000, uart_clock=64000000, divider=RCC_HCLK_DIV2;
+#ifdef RC_H723
+void HAL_RCCEx_GetPLL2ClockFreq(PLL2_ClocksTypeDef *clocks) { clocks->PLL2_Q_Frequency=uart_clock; }
+void HAL_RCCEx_GetPLL3ClockFreq(PLL3_ClocksTypeDef *clocks) { clocks->PLL3_Q_Frequency=uart_clock; }
+#endif
 uint32_t HAL_RCC_GetPCLK1Freq(void) { return pclk1; }
 uint32_t HAL_RCC_GetPCLK2Freq(void) { return pclk2; }
 void HAL_RCC_GetClockConfig(RCC_ClkInitTypeDef *cfg, uint32_t *latency) {
@@ -35,10 +39,12 @@ void HAL_RCC_GetClockConfig(RCC_ClkInitTypeDef *cfg, uint32_t *latency) {
 uint32_t HAL_RCCEx_GetPeriphCLKFreq(uint64_t peripheral) {
 #ifdef RC_H723
     assert(peripheral==RCC_PERIPHCLK_USART3);
+    /* The project HAL does not support querying USART clocks here. */
+    return 0;
 #else
     (void)peripheral;
-#endif
     return uart_clock;
+#endif
 }
 /* Strong generated handlers must coexist, but successful Init installs private handlers. */
 #ifdef RC_H723
@@ -109,9 +115,21 @@ int main(int argc, char **argv) {
         assert(RC_Init()==HAL_ERROR); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"invalid-uart-clock")) {
+#ifdef RC_H723
+        RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_HSI; /* Not ready. */
+#else
         uart_clock=pclk2=0;
+#endif
         assert(RC_Init()==HAL_ERROR); unchanged(original);
         assert(RCC->APB2ENR==0);
+#ifdef RC_H723
+    } else if (!strcmp(argv[1],"pll2-off") || !strcmp(argv[1],"pll2-no-q")) {
+        RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_PLL2;
+        RCC->CR=strcmp(argv[1],"pll2-off") ? RCC_CR_PLL2RDY : 0;
+        RCC->PLLCFGR=strcmp(argv[1],"pll2-no-q") ? RCC_PLLCFGR_DIVQ2EN : 0;
+        assert(RC_Init()==HAL_ERROR); unchanged(original);
+        assert(RCC->APB1LENR==0);
+#endif
     } else {
         uint32_t expected_primask=strcmp(argv[1],"unmasked") ? 1u : 0u;
         test_primask=expected_primask;
@@ -121,6 +139,29 @@ int main(int argc, char **argv) {
 #ifdef RC_H723
         if (!strcmp(argv[1],"timpre4")) { RCC->CFGR=RCC_CFGR_TIMPRE; divider=RCC_HCLK_DIV4; pclk1=60000000; expected_psc=239; }
         if (!strcmp(argv[1],"timpre8")) { RCC->CFGR=RCC_CFGR_TIMPRE; divider=RCC_HCLK_DIV8; pclk1=30000000; expected_psc=119; }
+        uint32_t expected_uart_clock=pclk1;
+        if (!strcmp(argv[1],"hsi-div4")) {
+            RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_HSI;
+            RCC->CR=RCC_CR_HSIRDY | (2u<<RCC_CR_HSIDIV_Pos);
+            expected_uart_clock=16000000;
+        }
+        if (!strcmp(argv[1],"csi")) {
+            RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_CSI; RCC->CR=RCC_CR_CSIRDY;
+            expected_uart_clock=4000000;
+        }
+        if (!strcmp(argv[1],"pll2")) {
+            RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_PLL2; RCC->CR=RCC_CR_PLL2RDY;
+            RCC->PLLCFGR=RCC_PLLCFGR_DIVQ2EN; expected_uart_clock=uart_clock;
+        }
+        if (!strcmp(argv[1],"pll3")) {
+            RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_PLL3; RCC->CR=RCC_CR_PLL3RDY;
+            RCC->PLLCFGR=RCC_PLLCFGR_DIVQ3EN; expected_uart_clock=uart_clock;
+        }
+        if (!strcmp(argv[1],"lse")) {
+            RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_LSE; RCC->BDCR=RCC_BDCR_LSERDY;
+            expected_uart_clock=32768;
+        }
+        uint32_t source=RCC->D2CCIP2R;
 #endif
 #ifdef RC_H723
         if (!strcmp(argv[1],"old-peripherals")) {
@@ -131,6 +172,10 @@ int main(int argc, char **argv) {
         }
 #endif
         int bt630=!strcmp(argv[1],"bt630");
+        uint32_t baud=bt630 ? 115200 : 9600;
+#ifdef RC_H723
+        if (!strcmp(argv[1],"lse")) baud=1200;
+#endif
         int cache=!strcmp(argv[1],"cache");
         if (cache) SCB->CCR=SCB_CCR_DC_Msk;
         TEST_GPIO->ODR=0xffff;
@@ -139,13 +184,14 @@ int main(int argc, char **argv) {
 #else
         TEST_GPIO->CRH=0xffffffff;
 #endif
-        assert((bt630?RC_InitBT630():RC_Init())==HAL_OK);
+        assert((bt630?RC_InitBT630():RC_InitBaud(baud))==HAL_OK);
         assert(test_primask==expected_primask && g_rc.valid_frames==0 && !g_rc.link_valid);
         assert(SCB->VTOR!=original);
         uint32_t *installed=(uint32_t *)(uintptr_t)SCB->VTOR;
 #ifdef RC_H723
         assert((SCB->VTOR%1024)==0);
-        assert(TEST_UART->BRR==(bt630?556:6667));
+        assert(TEST_UART->BRR==(expected_uart_clock+baud/2u)/baud);
+        assert(RCC->D2CCIP2R==source); /* Shared kernel clock selection is preserved. */
         assert((TEST_GPIO->MODER & (15u<<16))==(10u<<16));
         assert((TEST_GPIO->AFR[1] & 0xff)==0x77);
         assert((TEST_GPIO->PUPDR & (15u<<16))==(4u<<16));
@@ -170,7 +216,7 @@ int main(int argc, char **argv) {
         assert(TEST_TIMER->PSC==expected_psc && TEST_TIMER->ARR==999 && (TEST_TIMER->CR1 & TIM_CR1_CEN));
         assert(test_enabled[TEST_UART_IRQn] && test_enabled[TEST_TIMER_IRQn]);
         g_rc.valid_frames=77;
-        assert(RC_InitBaud(bt630?115200:9600)==HAL_OK && g_rc.valid_frames==77);
+        assert(RC_InitBaud(baud)==HAL_OK && g_rc.valid_frames==77);
         assert(RC_InitBaud(bt630?9600:115200)==HAL_BUSY && g_rc.valid_frames==77);
         /* Hand-checked CRC frame: disabled baseline then enabled axes. */
         const uint8_t disabled[20]={0xa5,0x5a,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x2e,0xc2};

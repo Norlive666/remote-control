@@ -105,6 +105,33 @@ static uint32_t initialized_baud;
 static void uart_irq(void);
 static void timer_irq(void);
 
+/* GetPeriphCLKFreq does not support USART in this HAL; preserve the shared mux. */
+static uint32_t uart_kernel_clock(void) {
+    switch (__HAL_RCC_GET_USART234578_SOURCE()) {
+    case RCC_USART234578CLKSOURCE_PCLK1:
+        return HAL_RCC_GetPCLK1Freq();
+    case RCC_USART234578CLKSOURCE_PLL2: {
+        PLL2_ClocksTypeDef clocks;
+        if (!(RCC->CR & RCC_CR_PLL2RDY) || !(RCC->PLLCFGR & RCC_PLLCFGR_DIVQ2EN)) return 0;
+        HAL_RCCEx_GetPLL2ClockFreq(&clocks);
+        return clocks.PLL2_Q_Frequency;
+    }
+    case RCC_USART234578CLKSOURCE_PLL3: {
+        PLL3_ClocksTypeDef clocks;
+        if (!(RCC->CR & RCC_CR_PLL3RDY) || !(RCC->PLLCFGR & RCC_PLLCFGR_DIVQ3EN)) return 0;
+        HAL_RCCEx_GetPLL3ClockFreq(&clocks);
+        return clocks.PLL3_Q_Frequency;
+    }
+    case RCC_USART234578CLKSOURCE_HSI:
+        return (RCC->CR & RCC_CR_HSIRDY) ? HSI_VALUE >> ((RCC->CR & RCC_CR_HSIDIV) >> RCC_CR_HSIDIV_Pos) : 0;
+    case RCC_USART234578CLKSOURCE_CSI:
+        return (RCC->CR & RCC_CR_CSIRDY) ? CSI_VALUE : 0;
+    case RCC_USART234578CLKSOURCE_LSE:
+        return (RCC->BDCR & RCC_BDCR_LSERDY) ? LSE_VALUE : 0;
+    default:
+        return 0;
+    }
+}
 static uint32_t timer_clock(void) {
     RCC_ClkInitTypeDef cfg;
     uint32_t latency, pclk;
@@ -157,7 +184,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     }
     if (occupied()) { unlock(key); return HAL_BUSY; }
 #ifdef RC_H723
-    uart_clock=HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART3);
+    uart_clock=uart_kernel_clock();
 #else
     uart_clock=HAL_RCC_GetPCLK2Freq();
 #endif

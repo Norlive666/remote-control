@@ -15,5 +15,9 @@ for spec in "h723 STM32H723xx $STM32_H7_CUBE_DIR STM32H7xx" "f103 STM32F103xB $S
         "$tmp_dir/$name" "$case"
     done
     if [[ "$name" == f103 ]]; then "$tmp_dir/$name" busy-remap;
-    else "$tmp_dir/$name" old-peripherals; "$tmp_dir/$name" timpre4; "$tmp_dir/$name" timpre8; fi
+    else
+        for case in old-peripherals timpre4 timpre8 hsi-div4 csi pll2 pll3 lse pll2-off pll2-no-q; do
+            "$tmp_dir/$name" "$case"
+        done
+    fi
 done

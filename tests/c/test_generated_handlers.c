@@ -17,7 +17,8 @@ void HAL_RCC_GetClockConfig(RCC_ClkInitTypeDef *cfg, uint32_t *latency) {
     cfg->APB1CLKDivider=RCC_HCLK_DIV2; *latency=0;
 }
 #ifdef STM32H723xx
-uint32_t HAL_RCCEx_GetPeriphCLKFreq(uint64_t peripheral) { (void)peripheral; return 64000000; }
+void HAL_RCCEx_GetPLL2ClockFreq(PLL2_ClocksTypeDef *clocks) { clocks->PLL2_Q_Frequency=64000000; }
+void HAL_RCCEx_GetPLL3ClockFreq(PLL3_ClocksTypeDef *clocks) { clocks->PLL3_Q_Frequency=64000000; }
 #endif
 void *memmove(void *dst, const void *src, size_t n) {
     unsigned char *d=dst; const unsigned char *s=src;
