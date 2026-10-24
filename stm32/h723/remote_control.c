@@ -147,7 +147,16 @@ static uint32_t timer_clock(void) {
 #endif
 }
 static int occupied(void) {
-    if (RCC->APB1LENR & RCC_APB1LENR_USART3EN) return 1;
+    if (RCC->APB1LENR & RCC_APB1LENR_USART3EN) {
+        if (USART3->CR1 & (USART_CR1_IDLEIE|USART_CR1_RXNEIE_RXFNEIE|USART_CR1_TCIE|
+                          USART_CR1_TXEIE_TXFNFIE|USART_CR1_PEIE|USART_CR1_CMIE|
+                          USART_CR1_RTOIE|USART_CR1_EOBIE|USART_CR1_TXFEIE|USART_CR1_RXFFIE)) return 1;
+        if (USART3->CR2 & USART_CR2_LBDIE) return 1;
+        if (USART3->CR3 & (USART_CR3_EIE|USART_CR3_DMAR|USART_CR3_DMAT|USART_CR3_CTSIE|
+                          USART_CR3_WUFIE|USART_CR3_TXFTIE|USART_CR3_TCBGTIE|USART_CR3_RXFTIE)) return 1;
+        if ((USART3->CR1 & (USART_CR1_UE|USART_CR1_TE))==(USART_CR1_UE|USART_CR1_TE) &&
+            !(USART3->ISR & USART_ISR_TC)) return 1;
+    } else if (NVIC_GetEnableIRQ(USART3_IRQn)) return 1;
 #ifdef RC_H723
     if (RCC->APB1LENR & RCC_APB1LENR_TIM5EN) return 1;
 #else
@@ -155,7 +164,7 @@ static int occupied(void) {
     /* A remapped USART3 cannot use PA9/PA10 without changing shared AFIO state. */
     if ((RCC->APB2ENR & RCC_APB2ENR_AFIOEN) && (AFIO->MAPR & AFIO_MAPR_USART1_REMAP)) return 1;
 #endif
-    return NVIC_GetEnableIRQ(USART3_IRQn) || NVIC_GetEnableIRQ(TIM5_IRQn);
+    return NVIC_GetEnableIRQ(TIM5_IRQn);
 }
 static void install_vectors(void) {
     const uint32_t *original=(const uint32_t *)(uintptr_t)SCB->VTOR;
@@ -215,7 +224,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     MODIFY_REG(GPIOA->CRH,0xff0u,0x8b0u); /* PA9 AF push-pull; PA10 input pull-up. */
     GPIOA->BSRR=1u<<10;
 #endif
-    USART3->CR1=0; USART3->CR2=0; USART3->CR3=0;
+    USART3->CR1=0; USART3->CR2=RC_RX_INVERT ? USART_CR2_RXINV : 0; USART3->CR3=0;
 #ifdef RC_H723
     USART3->PRESC=0;
     USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
@@ -243,7 +252,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     unlock(key);
     return HAL_OK;
 }
-HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(9600); }
+HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(RC_DEFAULT_BAUD); }
 HAL_StatusTypeDef RC_InitBT630(void) { return RC_InitBaud(115200); }
 static void uart_irq(void) {
 #ifdef RC_H723

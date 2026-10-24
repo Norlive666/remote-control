@@ -69,6 +69,13 @@ static void unchanged(uint32_t vtor) {
     assert(SCB->VTOR==vtor && g_rc.valid_frames==123 && test_primask==1);
     assert(TEST_GPIO->ODR==0x1234 && TEST_TIMER->PSC==0x1234 && TEST_UART->BRR==0x1234);
 }
+static void uart_busy(uint32_t original) {
+    uint32_t cr1=TEST_UART->CR1, cr2=TEST_UART->CR2, cr3=TEST_UART->CR3;
+    uint32_t irq=test_enabled[TEST_UART_IRQn];
+    assert(RC_Init()==HAL_BUSY); unchanged(original);
+    assert(TEST_UART->CR1==cr1 && TEST_UART->CR2==cr2 && TEST_UART->CR3==cr3);
+    assert(test_enabled[TEST_UART_IRQn]==irq && TEST_UART_ENR==TEST_UART_EN);
+}
 int main(int argc, char **argv) {
     assert(argc==2);
     assert(mmap((void *)0x40000000,0x20000000,PROT_READ|PROT_WRITE,
@@ -80,8 +87,48 @@ int main(int argc, char **argv) {
     TEST_GPIO->ODR=TEST_TIMER->PSC=TEST_UART->BRR=0x1234;
     if (!strcmp(argv[1],"busy-uart")) {
         TEST_UART_ENR=TEST_UART_EN;
-        assert(RC_Init()==HAL_BUSY); unchanged(original);
-        assert(TEST_UART_ENR==TEST_UART_EN);
+        TEST_UART->CR1=USART_CR1_IDLEIE;
+        uart_busy(original);
+    } else if (!strcmp(argv[1],"busy-dma-rx") || !strcmp(argv[1],"busy-dma-tx")) {
+        TEST_UART_ENR=TEST_UART_EN;
+        TEST_UART->CR3=!strcmp(argv[1],"busy-dma-rx") ? USART_CR3_DMAR : USART_CR3_DMAT;
+        uart_busy(original);
+    } else if (!strcmp(argv[1],"busy-rx-ie")) {
+        TEST_UART_ENR=TEST_UART_EN;
+#ifdef RC_H723
+        TEST_UART->CR1=USART_CR1_RXNEIE_RXFNEIE;
+#else
+        TEST_UART->CR1=USART_CR1_RXNEIE;
+#endif
+        uart_busy(original);
+    } else if (!strcmp(argv[1],"busy-tc-ie") || !strcmp(argv[1],"busy-parity-ie")) {
+        TEST_UART_ENR=TEST_UART_EN;
+        TEST_UART->CR1=!strcmp(argv[1],"busy-tc-ie") ? USART_CR1_TCIE : USART_CR1_PEIE;
+        uart_busy(original);
+    } else if (!strcmp(argv[1],"busy-txe-ie") || !strcmp(argv[1],"busy-lin-ie")) {
+        TEST_UART_ENR=TEST_UART_EN;
+        if (!strcmp(argv[1],"busy-lin-ie")) TEST_UART->CR2=USART_CR2_LBDIE;
+#ifdef RC_H723
+        else TEST_UART->CR1=USART_CR1_TXEIE_TXFNFIE;
+#else
+        else TEST_UART->CR1=USART_CR1_TXEIE;
+#endif
+        uart_busy(original);
+    } else if (!strcmp(argv[1],"busy-error-ie") || !strcmp(argv[1],"busy-cts-ie")) {
+        TEST_UART_ENR=TEST_UART_EN;
+        TEST_UART->CR3=!strcmp(argv[1],"busy-error-ie") ? USART_CR3_EIE : USART_CR3_CTSIE;
+        uart_busy(original);
+    } else if (!strcmp(argv[1],"busy-tx-hardware")) {
+        TEST_UART_ENR=TEST_UART_EN;
+        TEST_UART->CR1=USART_CR1_UE|USART_CR1_TE;
+        uart_busy(original);
+#ifdef RC_H723
+    } else if (!strcmp(argv[1],"busy-rto-ie") || !strcmp(argv[1],"busy-fifo-ie")) {
+        TEST_UART_ENR=TEST_UART_EN;
+        if (!strcmp(argv[1],"busy-rto-ie")) TEST_UART->CR1=USART_CR1_RTOIE;
+        else TEST_UART->CR3=USART_CR3_RXFTIE;
+        uart_busy(original);
+#endif
     } else if (!strcmp(argv[1],"busy-timer")) {
 #ifdef RC_H723
         RCC->APB1LENR=RCC_APB1LENR_TIM5EN;
@@ -129,6 +176,13 @@ int main(int argc, char **argv) {
         RCC->PLLCFGR=strcmp(argv[1],"pll2-no-q") ? RCC_PLLCFGR_DIVQ2EN : 0;
         assert(RC_Init()==HAL_ERROR); unchanged(original);
         assert(RCC->APB1LENR==0);
+#endif
+    } else if (!strcmp(argv[1],"default-baud")) {
+        assert(RC_Init()==HAL_OK);
+#ifdef RC_H723
+        assert(TEST_UART->BRR==313); /* 36 MHz / 115200, rounded. */
+#else
+        assert(TEST_UART->BRR==625); /* 72 MHz / 115200. */
 #endif
     } else {
         uint32_t expected_primask=strcmp(argv[1],"unmasked") ? 1u : 0u;
@@ -178,6 +232,17 @@ int main(int argc, char **argv) {
 #endif
         int cache=!strcmp(argv[1],"cache");
         if (cache) SCB->CCR=SCB_CCR_DC_Msk;
+        if (!strcmp(argv[1],"reuse-uart") || !strcmp(argv[1],"reuse-uart-irq")) {
+            TEST_UART_ENR |= TEST_UART_EN;
+            TEST_UART->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_PCE;
+            TEST_UART->CR2=USART_CR2_STOP_1;
+#ifdef RC_H723
+            TEST_UART->ISR=USART_ISR_TC;
+#else
+            TEST_UART->SR=USART_SR_TC;
+#endif
+            test_enabled[TEST_UART_IRQn]=!strcmp(argv[1],"reuse-uart-irq");
+        }
         TEST_GPIO->ODR=0xffff;
 #ifdef RC_H723
         TEST_GPIO->MODER=TEST_GPIO->PUPDR=TEST_GPIO->AFR[1]=0xffffffff;
@@ -191,6 +256,11 @@ int main(int argc, char **argv) {
 #ifdef RC_H723
         assert((SCB->VTOR%1024)==0);
         assert(TEST_UART->BRR==(expected_uart_clock+baud/2u)/baud);
+#if defined(RC_RX_INVERT) && RC_RX_INVERT
+        assert(TEST_UART->CR2==USART_CR2_RXINV);
+#else
+        assert(TEST_UART->CR2==0);
+#endif
         assert(RCC->D2CCIP2R==source); /* Shared kernel clock selection is preserved. */
         assert((TEST_GPIO->MODER & (15u<<16))==(10u<<16));
         assert((TEST_GPIO->AFR[1] & 0xff)==0x77);
@@ -206,10 +276,12 @@ int main(int argc, char **argv) {
 #else
         assert((SCB->VTOR%256)==0);
         assert(TEST_UART->BRR==(bt630?625:7500));
+        assert(TEST_UART->CR2==0);
         assert((TEST_GPIO->CRH & 0xff0)==0x8b0);
         assert(TEST_GPIO->ODR==0xffff);
         unsigned count=59;
 #endif
+        assert((TEST_UART->CR1 & USART_CR1_PCE)==0 && TEST_UART->CR3==0);
         for (unsigned i=0;i<count;i++)
             if (i!=16+TEST_UART_IRQn && i!=16+TEST_TIMER_IRQn) assert(installed[i]==vectors[i]);
         assert(test_enabled[5]==1 && test_priority[5]==12);

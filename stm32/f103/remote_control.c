@@ -120,7 +120,14 @@ static uint32_t timer_clock(void) {
 #endif
 }
 static int occupied(void) {
-    if (RCC->APB2ENR & RCC_APB2ENR_USART1EN) return 1;
+    if (RCC->APB2ENR & RCC_APB2ENR_USART1EN) {
+        if (USART1->CR1 & (USART_CR1_IDLEIE|USART_CR1_RXNEIE|USART_CR1_TCIE|
+                          USART_CR1_TXEIE|USART_CR1_PEIE)) return 1;
+        if (USART1->CR2 & USART_CR2_LBDIE) return 1;
+        if (USART1->CR3 & (USART_CR3_EIE|USART_CR3_DMAR|USART_CR3_DMAT|USART_CR3_CTSIE)) return 1;
+        if ((USART1->CR1 & (USART_CR1_UE|USART_CR1_TE))==(USART_CR1_UE|USART_CR1_TE) &&
+            !(USART1->SR & USART_SR_TC)) return 1;
+    } else if (NVIC_GetEnableIRQ(USART1_IRQn)) return 1;
 #ifdef RC_H723
     if (RCC->APB1LENR & RCC_APB1LENR_TIM4EN) return 1;
 #else
@@ -128,7 +135,7 @@ static int occupied(void) {
     /* A remapped USART1 cannot use PA9/PA10 without changing shared AFIO state. */
     if ((RCC->APB2ENR & RCC_APB2ENR_AFIOEN) && (AFIO->MAPR & AFIO_MAPR_USART1_REMAP)) return 1;
 #endif
-    return NVIC_GetEnableIRQ(USART1_IRQn) || NVIC_GetEnableIRQ(TIM4_IRQn);
+    return NVIC_GetEnableIRQ(TIM4_IRQn);
 }
 static void install_vectors(void) {
     const uint32_t *original=(const uint32_t *)(uintptr_t)SCB->VTOR;
@@ -216,7 +223,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     unlock(key);
     return HAL_OK;
 }
-HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(9600); }
+HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(RC_DEFAULT_BAUD); }
 HAL_StatusTypeDef RC_InitBT630(void) { return RC_InitBaud(115200); }
 static void uart_irq(void) {
 #ifdef RC_H723

@@ -5,7 +5,8 @@
 ```c
 HAL_Init();
 SystemClock_Config();
-if (RC_Init() != HAL_OK) Error_Handler();       /* HC-05，9600 bit/s */
+/* 有 CubeMX 外设初始化时，先完成 MX_DMA_Init()/MX_USARTx_UART_Init() 等调用。 */
+if (RC_Init() != HAL_OK) Error_Handler();       /* 使用头文件 RC_DEFAULT_BAUD，默认9600 */
 /* 或 RC_InitBT630()：FSC-BT630，115200 bit/s。其他波特率用 RC_InitBaud(baud)。 */
 
 RC_State_t state;
@@ -27,18 +28,39 @@ H723 的 PD8/PD9 AF7 定义见 [ST 数据手册](https://www.st.com/resource/en/
 ## 两文件、一行初始化
 
 1. 将对应型号的 `remote_control.c` 加入编译，将 `remote_control.h` 所在目录加入头文件搜索路径；在使用处 `#include "remote_control.h"`。
-2. 在 `HAL_Init()`、`SystemClock_Config()` 后加入 `if (RC_Init() != HAL_OK) Error_Handler();`，或者在业务程序中检查并处理返回状态。BT630 使用 `RC_InitBT630()`；实际模块已修改波特率时使用 `RC_InitBaud(baud)`。
+2. 在 `HAL_Init()`、`SystemClock_Config()` 和全部 `MX_*_Init()` 之后、其他串口业务开始之前，加入 `if (RC_Init() != HAL_OK) Error_Handler();`，或者在业务程序中检查并处理返回状态。BT630 可将头文件 `RC_DEFAULT_BAUD` 改为 `115200U` 后只调用 `RC_Init()`；也兼容固定115200的 `RC_InitBT630()`，以及 `RC_InitBaud(baud)`。
 3. 无需 `.ioc` 中配置 对应 GPIO/USART/定时器，无需 `uart.c`、`tim.c`，无需开启 HAL UART/TIM/GPIO/DMA 模块，无需编辑中断函数。工程保留基础 HAL/RCC（H723 包括 RCCEx）、芯片 CMSIS、启动文件、链接脚本和系统时钟。
 
 驱动直接配置 对应 GPIO/USART/定时器 寄存器，不调用生成的 MSP 回调。使用私有中断函数，复制当前向量表到对齐 RAM 后仅替换所选串口、定时器两项（H723 USART3/TIM5，F103 USART1/TIM4）；不导出所选外设的生成器常用 IRQ 或 HAL 句柄名称。因此原有 `uart.c`、`tim.c` 和 `stm32xx_it.c` 可以保留并一起编译，不需要合并同名中断函数；其他中断入口和优先级分组保持不变。RAM 向量表内容占 F103 236 字节、H723 716 字节，另有链接对齐开销。H723 在数据缓存开启时清理表缓存，切换 VTOR 前后使用屏障。
 
+## 头文件配置与已配置串口
+
+每个芯片包的 `remote_control.h` 顶部集中提供：
+
+```c
+#define RC_DEFAULT_BAUD 9600U /* RC_Init() 使用的波特率；BT630 改为115200U。 */
+#define RC_RX_INVERT 0       /* 普通UART接线为0；H723经过Q5反相的D-Bus接口为1。 */
+```
+
+这两项可直接编辑头文件，或通过对所有驱动编译单元生效的编译参数覆盖。在 `main.c` 的 `#include` 前单独定义宏，不会改变独立编译的驱动配置。`RC_InitBT630()` 始终使用115200，`RC_InitBaud(baud)` 使用参数值；两者同样遵循接收反相配置。F103没有硬件接收反相，设置非零 `RC_RX_INVERT` 会编译失败；不要把 H723 反相头文件配置直接复制给F103。
+
+H723板卡的D-Bus接口若像本项目实测板一样，通过NPN管Q5再连接PD9，接口输入与芯片RX电平相反，应设 `RC_RX_INVERT 1`。在该实测原理图中，BT630 TXD接CN14第3脚，GND接第1脚；供电按模块/转接板规格。若绕过Q5直接接PD9，应设为0。驱动不会自动猜测电路极性。
+
+| 工程情况 | 接入方式 |
+| --- | --- |
+| `.ioc` 没配置目标UART | 加入两文件并调用Init，驱动自行初始化 |
+| 已执行目标 `MX_USARTx_UART_Init()`，但未启动收发业务 | 保留生成文件和初始化调用，随后调用Init；驱动按配置重新设置波特率、帧格式和极性 |
+| 已启用UART收发/错误中断、DMA请求，或发送器尚未发送完成 | 返回 `HAL_BUSY`，不接管、不修改原状态 |
+
+生成的DMA句柄和UART NVIC本身已配置，不等于正在收发；驱动允许这种空闲状态。驱动不需要 `huart` 参数，也不读取或更新生成的HAL句柄。初始化成功后，该UART及固定引脚独占给本驱动，不能再用于其他协议、HAL收发调用、重新初始化或由其他任务/中断修改。轮询收发的软件占用和未来才启动的业务无法由寄存器完整判断，因此必须在这些业务开始前决定UART归属。初始化会丢弃旧的待收字节并重新建立协议基线。
+
 ## 占用与返回状态
 
 - `HAL_OK`：初始化成功；相同波特率再次调用也是 `HAL_OK`，不重置数据或计数器。
-- `HAL_BUSY`：所选 USART 或定时器的外设时钟已启用，或目标中断已启用；不修改原外设、向量表和 `g_rc`。F103 的 USART1 已重映射到其他引脚也返回此状态，并保留重映射与调试设置。驱动初始化成功后改用其他波特率调用也返回 `HAL_BUSY`。
+- `HAL_BUSY`：目标UART存在启用的收发/错误中断、DMA请求或尚未完成的发送；UART时钟关闭但目标NVIC已启用时也保守返回此状态。所选定时器时钟或中断已启用，或F103 USART1已重映射，同样返回此状态。不修改原外设、向量表和 `g_rc`。驱动初始化成功后改用其他波特率调用也返回 `HAL_BUSY`。
 - `HAL_ERROR`：波特率或时钟不能生成支持的串口/定时分频；不修改原硬件和 `g_rc`。
 
-文件共存不代表同一个外设能同时承担两种用途。H723 原工程若已调用 `MX_USART3_UART_Init()` 或 `MX_TIM5_Init()`，驱动返回 `HAL_BUSY`；F103 对应为 `MX_USART1_UART_Init()`、`MX_TIM4_Init()`。使用本驱动时应避免执行对应生成初始化函数，也不要在驱动成功后重新配置它占用的外设和引脚。H723 原有 USART1、TIM4 可以继续使用。引脚必须预留；驱动不能识别原工程以后才执行的配置，也不能自动判断所有引脚用途。
+文件共存不代表同一个外设能同时承担两种用途。H723的 `MX_USART3_UART_Init()`、F103的 `MX_USART1_UART_Init()` 可以保留；但不能同时启动对应串口原来的D-Bus或其他接收业务。定时器保护未放宽：H723若已经执行 `MX_TIM5_Init()`，或F103执行 `MX_TIM4_Init()`，仍返回 `HAL_BUSY`，即使定时器尚未启动。H723原有USART1、TIM4可以继续使用。固定引脚必须预留，驱动不能判断所有引脚用途。v2.2.0只简化驱动接入，不会自动映射到原工程的 `rc_ctrl`、底盘或云台。
 
 请勿在初始化后覆盖或再次迁移中断向量表；自定义启动、RTOS 或引导程序有自己的向量移交步骤时，应在其最后一次移交之后初始化本驱动。标准 CubeIDE/GCC 链接脚本无需新增驱动专用段。系统时钟和所选 USART 的内核时钟源由原工程设定，驱动按现有时钟计算分频，不修改共享时钟源；初始化后不要改变这些时钟。
 
