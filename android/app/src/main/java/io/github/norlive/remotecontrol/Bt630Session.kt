@@ -57,7 +57,7 @@ class Bt630Session(
             generation++
             job?.cancel()
             job = null
-            activeLink?.close()
+            try { activeLink?.close() } catch (_: Exception) { }
             activeLink = null
             pauseControls()
             stateChanged(State.Idle)
@@ -96,8 +96,10 @@ class Bt630Session(
                     }
                 }
                 currentCoroutineContext().ensureActive()
+                if (loss.isCompleted) throw Bt630Failure(loss.await())
                 update(token) { pauseControls(); stateChanged(State.Ready) }
                 currentCoroutineContext().ensureActive()
+                if (loss.isCompleted) throw Bt630Failure(loss.await())
                 coroutineScope {
                     val readyPeriod = CompletableDeferred<Unit>()
                     stable = readyPeriod
@@ -126,7 +128,7 @@ class Bt630Session(
                     else -> true
                 }
             } finally {
-                link?.close()
+                try { link?.close() } catch (_: Exception) { }
                 synchronized(guard) {
                     if (generation == token && activeLink === link) activeLink = null
                 }

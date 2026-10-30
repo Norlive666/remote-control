@@ -17,11 +17,12 @@ import org.junit.Test
 class Bt630SessionTest {
     private class Link(val openAction: suspend () -> Unit = {}) : Bt630Session.Link {
         var closed = false
+        var closeAction: () -> Unit = {}
         val frames = mutableListOf<ByteArray>()
         var sendAction: suspend () -> Unit = {}
         override suspend fun open() = openAction()
         override suspend fun send(frame: ByteArray) { frames += frame.copyOf(); sendAction() }
-        override fun close() { closed = true }
+        override fun close() { closed = true; closeAction() }
     }
 
     private class Harness(scope: TestScope, val create: (Int) -> Link = { Link() }) {
@@ -164,6 +165,23 @@ class Bt630SessionTest {
         h.losses.single()("lost"); runCurrent()
         assertTrue(h.states.last() is Bt630Session.State.Connecting)
         assertEquals(1, h.links.size)
+        h.session.stop()
+    }
+
+    @Test fun stopPausesAndPublishesIdleEvenWhenLinkCloseThrows() = runTest {
+        val h = Harness(this) { Link().apply { closeAction = { throw SecurityException("revoked") } } }
+        h.session.start(); runCurrent()
+        h.session.stop()
+        assertFalse(h.enabled)
+        assertEquals(Bt630Session.State.Idle, h.states.last())
+    }
+
+    @Test fun lossInsideOpenCannotPublishReadyOrSend() = runTest {
+        lateinit var h: Harness
+        h = Harness(TestScope(UnconfinedTestDispatcher(testScheduler))) { Link { h.losses.last()("disconnected") } }
+        h.session.start(); runCurrent()
+        assertFalse(h.states.contains(Bt630Session.State.Ready))
+        assertTrue(h.links.first().frames.isEmpty())
         h.session.stop()
     }
 

@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -19,6 +20,9 @@ import org.mockito.Mockito.*
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -246,6 +250,59 @@ class Bt630GattClientTest {
         assertEquals(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT, f.tx.writeType)
         f.callback.onCharacteristicWrite(f.gatt, f.tx, 0); runCurrent(); writing.await()
         f.client.close()
+    }
+
+    @Test @Config(sdk = [28]) fun legacyNotificationDeliversCopiedFff1Only() = runTest {
+        val f = Fixture(this)
+        `when`(f.gatt.writeDescriptor(f.cccd)).thenReturn(true)
+        val opening = async { f.client.open() }; runCurrent(); f.connected(); runCurrent(); f.discovered(); runCurrent(); f.subscribed(); runCurrent(); opening.await()
+        f.tx.value = byteArrayOf(1)
+        f.callback.onCharacteristicChanged(f.gatt, f.tx)
+        val bytes = byteArrayOf(2)
+        f.rx.value = bytes
+        f.callback.onCharacteristicChanged(f.gatt, f.rx)
+        bytes[0] = 3
+        f.callback.onCharacteristicChanged(mock(BluetoothGatt::class.java), f.rx)
+        assertEquals(1, f.received.size)
+        assertArrayEquals(byteArrayOf(2), f.received.single())
+        f.client.close()
+    }
+
+    @Test fun disconnectPermissionFailureStillClosesGatt() = runTest {
+        val f = Fixture(this, notify = false)
+        val opening = async { f.client.open() }; runCurrent(); f.connected(); runCurrent(); f.discovered(); runCurrent(); opening.await()
+        doThrow(SecurityException("revoked")).`when`(f.gatt).disconnect()
+        f.client.close()
+        verify(f.gatt).close()
+    }
+
+    @Test fun closeCannotPassAWriteBetweenValidationAndPlatformCall() = runTest {
+        val f = Fixture(this, notify = false)
+        val characteristic = mock(BluetoothGattCharacteristic::class.java)
+        `when`(characteristic.uuid).thenReturn(uuid("fff2"))
+        val reads = AtomicInteger()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        doAnswer {
+            if (reads.incrementAndGet() > 1) { entered.countDown(); release.await(2, TimeUnit.SECONDS) }
+            BluetoothGattCharacteristic.PROPERTY_WRITE
+        }.`when`(characteristic).properties
+        f.service.characteristics.clear(); f.service.addCharacteristic(characteristic)
+        `when`(f.gatt.writeCharacteristic(eq(characteristic), any(ByteArray::class.java), anyInt())).thenReturn(BluetoothStatusCodes.SUCCESS)
+        val opening = async { f.client.open() }; runCurrent(); f.connected(); runCurrent(); f.discovered(); runCurrent(); opening.await()
+        val sending = async(Dispatchers.Default) { runCatching { f.client.send(byteArrayOf(1)) } }
+        assertTrue(entered.await(2, TimeUnit.SECONDS))
+        val closeStarted = CountDownLatch(1)
+        val closeFinished = CountDownLatch(1)
+        val closing = async(Dispatchers.Default) {
+            closeStarted.countDown()
+            try { f.client.close() } finally { closeFinished.countDown() }
+        }
+        assertTrue(closeStarted.await(2, TimeUnit.SECONDS))
+        assertFalse(closeFinished.await(100, TimeUnit.MILLISECONDS))
+        release.countDown()
+        closing.await(); sending.await()
+        verify(f.gatt).writeCharacteristic(eq(characteristic), any(ByteArray::class.java), anyInt())
     }
 
     @Test fun missingPermissionAndDisabledAdapterArePermanent() = runTest {

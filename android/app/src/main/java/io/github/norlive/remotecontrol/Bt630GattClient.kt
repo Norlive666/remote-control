@@ -73,14 +73,18 @@ class Bt630GattClient(
             writing = pending
         }
         try {
-            val type = if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0)
-                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            val started = if (Build.VERSION.SDK_INT >= 33) {
-                connection.writeCharacteristic(characteristic, frame.copyOf(), type) == BluetoothStatusCodes.SUCCESS
-            } else {
-                characteristic.writeType = type
-                characteristic.value = frame.copyOf()
-                connection.writeCharacteristic(characteristic)
+            val started = synchronized(guard) {
+                if (generation != token || phase != Phase.READY || gatt !== connection)
+                    throw Bt630Failure("GATT is closed")
+                val type = if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0)
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                if (Build.VERSION.SDK_INT >= 33) {
+                    connection.writeCharacteristic(characteristic, frame.copyOf(), type) == BluetoothStatusCodes.SUCCESS
+                } else {
+                    characteristic.writeType = type
+                    characteristic.value = frame.copyOf()
+                    connection.writeCharacteristic(characteristic)
+                }
             }
             if (!started) throw Bt630Failure("GATT write could not start")
             try { withTimeout(1_000) { pending.await() } }
@@ -108,8 +112,8 @@ class Bt630GattClient(
             old = gatt
             gatt = null
         }
-        old?.disconnect()
-        old?.close()
+        try { old?.disconnect() } catch (_: SecurityException) { }
+        try { old?.close() } catch (_: SecurityException) { }
     }
 
     private fun closeCurrent(token: Long) = synchronized(guard) {
@@ -215,6 +219,14 @@ class Bt630GattClient(
         override fun onCharacteristicChanged(connection: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             synchronized(guard) {
                 if (current(connection) && phase == Phase.READY && characteristic === rx) received(value.copyOf())
+            }
+        }
+
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(connection: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            synchronized(guard) {
+                if (current(connection) && phase == Phase.READY && characteristic === rx)
+                    characteristic.value?.let { received(it.copyOf()) }
             }
         }
     }
