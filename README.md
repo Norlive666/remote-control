@@ -10,6 +10,8 @@
 
 驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.2.1/remote-control-stm32-v2.2.1.zip)。
 
+BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移植与排障指南](docs/bt630-porting.md)，包含 `BLE 写入失败 -5` 与 UART/定时器分频的区别。
+
 1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入对应芯片的两个源文件。
 2. **BLE 串口**（默认）：扫描并连接 FFE0 / FFE1 模块，UART 为 9600、8N1 时 STM32 调用 `RC_InitBaud(9600)`。旧版保存的 HC-05 经典模式自动回落到 BLE 串口；本版已移除经典 SPP 连接。
 3. **BT630**：模块应运行 UART 透传固件，UART 为 115200、8N1；App 切换 BT630 BLE 并扫描连接。STM32 调用 `RC_Init()`（默认115200；也兼容 `RC_InitBT630()`）。默认检查 FFF0 / FFF2，不要求 BLE 模块与手机先在系统中配对。

@@ -1,5 +1,7 @@
 # STM32 接收端接入
 
+BT630 专项接线、手机连接、移植验证和故障排查见 [BT630 移植与排障指南](bt630-porting.md)。
+
 `stm32/h723/` 适用于 STM32H723VGT6，`stm32/f103/` 适用于 STM32F103C8T6。每个目录的 `remote_control.c` 和 `remote_control.h` 是独立的两文件包，只复制对应目录中的两文件到自己的 HAL 工程。工程仍须提供该芯片的 HAL、CMSIS、启动文件、`HAL_Init()` 和系统时钟配置；本驱动不生成完整工程。
 
 ```c
