@@ -4,6 +4,7 @@ import android.Manifest
 import android.bluetooth.*
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
@@ -51,8 +52,10 @@ class Bt630GattClientTest {
             service.addCharacteristic(tx)
             if (notify) { rx.addDescriptor(cccd); service.addCharacteristic(rx) }
             `when`(gatt.setCharacteristicNotification(rx, true)).thenReturn(true)
-            `when`(gatt.writeDescriptor(eq(cccd), any(ByteArray::class.java))).thenReturn(BluetoothStatusCodes.SUCCESS)
-            `when`(gatt.writeCharacteristic(eq(tx), any(ByteArray::class.java), anyInt())).thenReturn(BluetoothStatusCodes.SUCCESS)
+            if (Build.VERSION.SDK_INT >= 33) {
+                `when`(gatt.writeDescriptor(eq(cccd), any(ByteArray::class.java))).thenReturn(BluetoothStatusCodes.SUCCESS)
+                `when`(gatt.writeCharacteristic(eq(tx), any(ByteArray::class.java), anyInt())).thenReturn(BluetoothStatusCodes.SUCCESS)
+            }
             client = Bt630GattClient(context, device, scope, { losses += it }, { received += it })
         }
         fun connected() = callback.onConnectionStateChange(gatt, BluetoothGatt.GATT_SUCCESS, BluetoothProfile.STATE_CONNECTED)

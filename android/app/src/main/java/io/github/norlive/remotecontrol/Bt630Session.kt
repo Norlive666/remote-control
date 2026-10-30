@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -44,10 +45,11 @@ class Bt630Session(
 
     fun start() {
         stop()
-        synchronized(guard) {
+        val next = synchronized(guard) {
             val token = ++generation
-            job = scope.launch { run(token) }
+            scope.launch(start = CoroutineStart.LAZY) { run(token) }.also { job = it }
         }
+        next.start()
     }
 
     fun stop() {
@@ -95,6 +97,7 @@ class Bt630Session(
                 }
                 currentCoroutineContext().ensureActive()
                 update(token) { pauseControls(); stateChanged(State.Ready) }
+                currentCoroutineContext().ensureActive()
                 coroutineScope {
                     val readyPeriod = CompletableDeferred<Unit>()
                     stable = readyPeriod
@@ -135,6 +138,7 @@ class Bt630Session(
                 update(token) { stateChanged(State.Failed(lastError ?: "Connection failed")) }
                 return
             }
+            update(token) { stateChanged(State.Connecting(attempt + 1, lastError)) }
             delay(when (attempt) { 0, 1 -> 1_000L; 2 -> 2_000L; else -> 4_000L })
         }
     }

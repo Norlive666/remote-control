@@ -1,6 +1,9 @@
 package io.github.norlive.remotecontrol
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
@@ -154,6 +157,16 @@ class Bt630SessionTest {
         h.session.stop()
     }
 
+    @Test fun lossImmediatelyLeavesReadyDuringBackoff() = runTest {
+        val h = Harness(this)
+        h.session.start(); runCurrent()
+        assertEquals(Bt630Session.State.Ready, h.states.last())
+        h.losses.single()("lost"); runCurrent()
+        assertTrue(h.states.last() is Bt630Session.State.Connecting)
+        assertEquals(1, h.links.size)
+        h.session.stop()
+    }
+
     @Test fun restartCancelsOldConnectionWithoutLettingItsCleanupAffectNewLink() = runTest {
         val h = Harness(this) { n -> Link { if (n == 1) awaitCancellation() } }
         h.session.start(); runCurrent()
@@ -173,6 +186,20 @@ class Bt630SessionTest {
         advanceTimeBy(1); runCurrent(); assertTrue(h.links.single().closed)
         advanceTimeBy(1_000); runCurrent(); assertEquals(2, h.links.size)
         h.session.stop()
+    }
+
+    @Test fun synchronousStopFromReadyCallbackCannotSendAnyFrame() = runTest {
+        val immediateScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val link = Link()
+        lateinit var session: Bt630Session
+        session = Bt630Session(immediateScope, { link }, { byteArrayOf(1) }, {}, {
+            if (it == Bt630Session.State.Ready) session.stop()
+        }, {})
+        try {
+            session.start(); runCurrent()
+            assertTrue(link.closed)
+            assertTrue(link.frames.isEmpty())
+        } finally { immediateScope.cancel() }
     }
 
     private fun <T> List<T>.indexOf(value: T, start: Int): Int =
