@@ -1,6 +1,7 @@
 package io.github.norlive.remotecontrol
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -14,6 +15,8 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.io.FileOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class ControllerUiTest {
@@ -21,7 +24,7 @@ class ControllerUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { changeMode(LinkMode.BLE_UART);beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
+        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -199,30 +202,50 @@ class ControllerUiTest {
         }
         compose.runOnIdle { assertEquals(1,vm.devices.size) }
     }
-    @Test fun classicModeIsRemovedAndOldPreferenceFallsBackToBle() {
+    @Test fun oldModePreferencesCannotChangeBt630Panel() {
         compose.runOnIdle {
             val prefs=compose.activity.application.getSharedPreferences("controller",0)
             prefs.edit().putString("mode","HC05").commit()
-            assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
+            assertEquals("HC05",prefs.getString("mode",null))
             prefs.edit().remove("mode").commit()
-            assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
         }
-        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).performClick()
+        compose.onNodeWithTag("connection-open").assertExists()
+        compose.onNodeWithText("FSC-BT630",useUnmergedTree=true).assertExists()
+        compose.onNodeWithText("50 Hz",useUnmergedTree=true).assertExists()
         compose.onNodeWithTag("link-mode-HC05").assertDoesNotExist()
+        compose.onNodeWithTag("link-mode-BLE_UART").assertDoesNotExist()
     }
-    @Test fun bleUartModeIsSelectableAndSurvivesReload() {
-        compose.onNodeWithText("BLE 串口",useUnmergedTree=true).performClick()
-        compose.onNodeWithTag("link-mode-BLE_UART").performClick()
-        compose.onNodeWithTag("link-mode-BLE_UART").assertIsSelected()
+    @Test fun connectionDialogKeepsListAndActionsVisibleAndHidesDiagnosticsUntilHelp() {
+        compose.onNodeWithTag("connection-open").performClick()
+        compose.onNodeWithTag("bt630-dialog").assertExists()
+        compose.onNodeWithTag("bt630-device-list").assertExists()
+        compose.onNodeWithTag("bt630-scan").assertExists()
+        compose.onNodeWithTag("bt630-cancel").assertExists()
+        compose.onNodeWithTag("bt630-help").assertExists()
+        compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertDoesNotExist()
+        compose.onNodeWithTag("bt630-help").performClick()
+        compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertExists()
+        val image=compose.onNodeWithTag("bt630-dialog").captureToImage().asAndroidBitmap()
+        val file=File(compose.activity.getExternalFilesDir(null),"bt630-connection.png")
+        FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        assertTrue(file.length()>0)
+    }
+    @Test fun choosingDeviceKeepsAttemptAndCancelVisible() {
+        compose.onNodeWithTag("connection-open").performClick()
+        val vm=model()
+        val adapter=compose.activity.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
         compose.runOnIdle {
-            assertEquals(LinkMode.BLE_UART,model().mode)
-            assertEquals(50L,model().mode.period)
-            assertEquals(LinkMode.BLE_UART,RemoteViewModel(compose.activity.application).mode)
+            val callback=RemoteViewModel::class.java.getDeclaredField("scanCallback").apply { isAccessible=true }.get(vm) as android.bluetooth.le.ScanCallback
+            val device=adapter.getRemoteDevice("F2:E7:05:FA:F8:F2")
+            callback.onScanResult(1,android.bluetooth.le.ScanResult(device,null,-50,1))
         }
-        compose.onNodeWithTag("link-mode-BLE_UART").performClick()
-        compose.onNodeWithTag("link-mode-BT630").performClick()
-        compose.runOnIdle { assertEquals(LinkMode.BT630,model().mode);assertEquals(20L,model().mode.period) }
-        compose.onNodeWithTag("link-mode-BLE_UART").performClick()
+        compose.onNodeWithTag("bt630-device-F2:E7:05:FA:F8:F2").assertExists()
+        compose.onNodeWithTag("bt630-connect-F2:E7:05:FA:F8:F2").performClick()
+        compose.onNodeWithTag("bt630-dialog").assertExists()
+        compose.onNodeWithTag("bt630-status").assertTextContains("1/5",substring=true)
+        compose.runOnIdle { vm.refreshDevices();assertTrue(vm.connecting) }
+        compose.onNodeWithTag("bt630-cancel").assertExists().performClick()
+        compose.runOnIdle { assertFalse(vm.connecting);assertFalse(vm.connected) }
     }
     @Test fun fourWayTouchSnapsAndReleaseZerosAndModeReloads() {
         compose.runOnIdle { model().setStickConfig(0,JoystickConfig(mode=JoystickMode.FOUR_WAY)) }
