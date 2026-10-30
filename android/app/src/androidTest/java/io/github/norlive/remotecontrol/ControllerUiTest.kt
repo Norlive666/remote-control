@@ -203,32 +203,32 @@ class ControllerUiTest {
         compose.runOnIdle { assertEquals(1,vm.devices.size) }
     }
     @Test fun oldModePreferencesCannotChangeBt630Panel() {
-        compose.runOnIdle {
-            val prefs=compose.activity.application.getSharedPreferences("controller",0)
-            prefs.edit().putString("mode","HC05").commit()
-            assertEquals("HC05",prefs.getString("mode",null))
-            prefs.edit().remove("mode").commit()
+        val prefs=compose.activity.application.getSharedPreferences("controller",0)
+        for(oldMode in listOf("HC05","BLE_UART")) {
+            compose.runOnIdle { prefs.edit().putString("mode",oldMode).commit();compose.activity.viewModelStore.clear() }
+            compose.activityRule.scenario.recreate()
+            compose.onNodeWithTag("connection-open").assertExists()
+            compose.onNodeWithText("FSC-BT630",useUnmergedTree=true).assertExists()
+            compose.onNodeWithText("50 Hz",useUnmergedTree=true).assertExists()
+            compose.onNodeWithTag("link-mode-HC05").assertDoesNotExist()
+            compose.onNodeWithTag("link-mode-BLE_UART").assertDoesNotExist()
         }
-        compose.onNodeWithTag("connection-open").assertExists()
-        compose.onNodeWithText("FSC-BT630",useUnmergedTree=true).assertExists()
-        compose.onNodeWithText("50 Hz",useUnmergedTree=true).assertExists()
-        compose.onNodeWithTag("link-mode-HC05").assertDoesNotExist()
-        compose.onNodeWithTag("link-mode-BLE_UART").assertDoesNotExist()
+        compose.runOnIdle { prefs.edit().remove("mode").commit() }
     }
     @Test fun connectionDialogKeepsListAndActionsVisibleAndHidesDiagnosticsUntilHelp() {
         compose.onNodeWithTag("connection-open").performClick()
         compose.onNodeWithTag("bt630-dialog").assertExists()
-        compose.onNodeWithTag("bt630-device-list").assertExists()
-        compose.onNodeWithTag("bt630-scan").assertExists()
-        compose.onNodeWithTag("bt630-cancel").assertExists()
+        compose.onNodeWithTag("bt630-device-list").assertIsDisplayed()
+        compose.onNodeWithTag("bt630-scan").assertIsDisplayed()
+        compose.onNodeWithTag("bt630-cancel").assertIsDisplayed()
         compose.onNodeWithTag("bt630-help").assertExists()
         compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertDoesNotExist()
-        compose.onNodeWithTag("bt630-help").performClick()
-        compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertExists()
         val image=compose.onNodeWithTag("bt630-dialog").captureToImage().asAndroidBitmap()
         val file=File(compose.activity.getExternalFilesDir(null),"bt630-connection.png")
         FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         assertTrue(file.length()>0)
+        compose.onNodeWithTag("bt630-help").performClick()
+        compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertExists()
     }
     @Test fun choosingDeviceKeepsAttemptAndCancelVisible() {
         compose.onNodeWithTag("connection-open").performClick()

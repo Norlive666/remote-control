@@ -155,11 +155,11 @@ private fun Modifier.softCard(): Modifier {
 private fun BluetoothHub(vm: RemoteViewModel,onConnect: ()->Unit) {
     Column(Modifier.fillMaxSize().softCard().padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.SpaceBetween) {
         FilledTonalButton(onConnect,enabled=!vm.layoutEditing,shape=RoundedCornerShape(14.dp),contentPadding=PaddingValues(horizontal=8.dp,vertical=3.dp),
-            colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color(0xffe1f5fe),contentColor=Accent),modifier=Modifier.fillMaxWidth().height(38.dp)) {
+            colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color(0xffe1f5fe),contentColor=Accent),modifier=Modifier.fillMaxWidth().height(38.dp).testTag("connection-open")) {
             Icon(Icons.Outlined.Bluetooth,null,Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Column {
-                Text(when(vm.mode){LinkMode.BT630->"FSC-BT630";LinkMode.BLE_UART->"BLE 串口"},fontSize=11.sp,lineHeight=12.sp,fontWeight=FontWeight.Bold)
+                Text("FSC-BT630",fontSize=11.sp,lineHeight=12.sp,fontWeight=FontWeight.Bold)
                 Text(if(vm.connected)"点击查看连接" else "点击配对连接",fontSize=9.sp,lineHeight=10.sp,color=Muted)
             }
         }
@@ -170,7 +170,7 @@ private fun BluetoothHub(vm: RemoteViewModel,onConnect: ()->Unit) {
                 Switch(vm.controls.enabled,{vm.enable(it)},enabled=vm.connected && !vm.layoutEditing,modifier=Modifier.height(32.dp))
                 Text("使能",fontSize=10.sp,color=Ink)
             }
-            Text("${1000/vm.mode.period} Hz",fontSize=10.sp,color=Muted,fontFamily=FontFamily.Monospace)
+            Text("${1000/BT630_PERIOD_MS} Hz",fontSize=10.sp,color=Muted,fontFamily=FontFamily.Monospace)
         }
     }
 }

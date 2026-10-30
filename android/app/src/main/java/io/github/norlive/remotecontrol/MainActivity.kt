@@ -98,24 +98,9 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
     EditablePanel(vm) { name ->
         if(name=="settings")settingsDialog=true else if(!vm.layoutEditing)action(name)
     }
-    if(connectionDialog) {
-        AlertDialog(onDismissRequest={connectionDialog=false;vm.stopScan()},title={Text("蓝牙连接")},text={
-            Column(Modifier.heightIn(max=320.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) { LinkMode.entries.forEach { mode -> FilterChip(vm.mode==mode,{vm.changeMode(mode);scan()},modifier=Modifier.testTag("link-mode-${mode.name}"),label={Text(when(mode){LinkMode.BT630->"BT630 BLE";LinkMode.BLE_UART->"BLE 串口"})}) } }
-                Text(when(vm.mode){LinkMode.BT630->"选择 BT630；连接时检查 FFF0 / FFF2 特征。";LinkMode.BLE_UART->"扫描 BLE 串口模块；检查 FFE0 服务与 FFE1 收发特征，无需先配对。"},fontSize=12.sp)
-                Text(vm.status,fontSize=12.sp,color=Muted)
-                if(vm.scanDetails.isNotEmpty())Text(vm.scanDetails,fontSize=11.sp,color=Muted)
-                Text("搜索需开启定位并允许精确位置权限；App 不读取 GPS 坐标。无需先系统配对。",fontSize=11.sp,color=Muted)
-                vm.devices.forEach { device ->
-                    OutlinedButton(onClick={vm.connect(device);connectionDialog=false},modifier=Modifier.fillMaxWidth(),enabled=!vm.connecting) {
-                        Column(Modifier.fillMaxWidth()) { Text(device.name);Text("${device.address} · ${device.source}",fontSize=11.sp,color=Muted) }
-                    }
-                }
-                Text("连接表示蓝牙链路就绪；当前协议不含 STM32 收包确认。",fontSize=11.sp,color=Muted)
-            }
-        },confirmButton={TextButton(scan){Text(if(vm.scanning)"重新扫描" else "刷新设备")}},dismissButton={
-            Row { TextButton(systemBluetooth){Text("系统蓝牙")};if(vm.connected || vm.connecting)TextButton({vm.disconnect();connectionDialog=false}){Text("断开")} }
-        })
+    if(connectionDialog) Bt630ConnectionDialog(vm,scan,systemBluetooth) {
+        if(vm.connecting)vm.disconnect() else vm.stopScan()
+        connectionDialog=false
     }
     if(settingsDialog) SettingsDialog(vm,onEdit={settingsDialog=false;vm.beginLayoutEdit()}) { settingsDialog=false }
 }
@@ -178,12 +163,11 @@ private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Uni
                     HorizontalDivider()
                 }
                 Text("自由与单轴模式分别应用各轴死区；四向模式按距离应用死区，输出横向或纵向（45° 优先纵向），力度连续变化。修改设置后该摇杆归零，松手后重新操作。",fontSize=11.sp,color=Muted)
-                Text("BLE 串口：20 Hz / STM32 默认 9600；BT630：50 Hz / STM32 115200。",fontSize=12.sp,color=Muted)
+                Text("BT630：${1000/BT630_PERIOD_MS} Hz / STM32 115200。",fontSize=12.sp,color=Muted)
                 Text("最近提交的数据帧（不代表 STM32 已收到）",fontSize=12.sp)
                 Text(vm.lastFrame,fontSize=11.sp,fontFamily=FontFamily.Monospace,color=Muted)
-                Text("最近收到的 ${if(vm.mode==LinkMode.BLE_UART)"FFE1" else "FFF1"} 数据（原始数据，非控制确认）",fontSize=12.sp)
+                Text("最近收到的 FFF1 数据（原始数据，非控制确认）",fontSize=12.sp)
                 Text(vm.lastReceived,fontSize=11.sp,fontFamily=FontFamily.Monospace,color=Muted)
-                Text("第三方组件：Nordic Android BLE Library，BSD-3-Clause。许可证见仓库 THIRD_PARTY_NOTICES.md。",fontSize=11.sp,color=Muted)
             }
         }
     }

@@ -22,9 +22,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlin.math.roundToInt
-import java.io.IOException
 
-enum class LinkMode(val title: String, val period: Long) { BLE_UART("BLE 串口 · FFE0/FFE1",50), BT630("BT630 · BLE",20) }
+const val BT630_PERIOD_MS=20L
 data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice,val viaBle: Boolean=false,val viaSystem: Boolean=false) {
     val source: String get()=if(viaBle && viaSystem)"BLE + 系统发现" else if(viaBle)"BLE" else "系统发现"
 }
@@ -58,8 +57,9 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var selectedLayoutId by mutableStateOf("leftPad"); private set
     var padCanvas by mutableStateOf(preferences.getBoolean("layout.padCanvas",false) || layoutSession.saved.keys.none { it=="leftPad" || it=="rightPad" }); private set
     var controls by mutableStateOf(session.state); private set
-    var mode by mutableStateOf(LinkMode.entries.firstOrNull { it.name==preferences.getString("mode",null) } ?: LinkMode.BLE_UART); private set
     var status by mutableStateOf("未连接"); private set
+    var connectionError by mutableStateOf(""); private set
+    var selectedDevice by mutableStateOf<DeviceRow?>(null); private set
     var connected by mutableStateOf(false); private set
     var connecting by mutableStateOf(false); private set
     var scanning by mutableStateOf(false); private set
@@ -91,9 +91,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var gamepadInputInfo by mutableStateOf("尚未收到手柄事件"); private set
     var lastGamepadInput by mutableStateOf("尚未操作"); private set
     init { sliderConfigs.forEachIndexed { i,config -> session.slider(i,config.map(0)) };sync() }
-    private var transport: BluetoothTransport?=null
-    private var connectJob: Job?=null
-    private var sendJob: Job?=null
+    private var btSession: Bt630Session?=null
     private var scanCallback: ScanCallback?=null
     private var scanner: android.bluetooth.le.BluetoothLeScanner?=null
     private var scanTimeout: Runnable?=null
@@ -117,11 +115,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             required.filter { it in missing || it==Manifest.permission.ACCESS_COARSE_LOCATION }.toTypedArray()
         else missing.toTypedArray()
     }
-    fun error(message: String) { status=message }
-    fun changeMode(value: LinkMode) {
-        if(mode==value)return
-        disconnect();mode=value;devices=emptyList();scanDetails="";preferences.edit().putString("mode",value.name).apply()
-    }
+    fun error(message: String) { connectionError=message;status="请检查蓝牙与权限" }
     private fun updateScanDetails() {
         scanDetails="BLE：$bleResults 条（$bleScanNote）；系统：$systemResults 条（$systemScanNote）；可选 ${devices.size} 个"
     }
@@ -135,7 +129,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         updateScanDetails()
     }
     fun refreshDevices() {
-        if(connected || connecting)disconnect() else stopScan()
+        if(connected || connecting)return
+        stopScan()
         devices=emptyList();scanDetails="";bleResults=0;systemResults=0;bleScanNote="未启动";systemScanNote="未启动"
         if(adapter==null) { status="手机不支持蓝牙";return }
         if(!adapter.isEnabled) { status="请先开启手机蓝牙";return }
@@ -219,40 +214,31 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         disconnect();if(!foreground)return
         if(adapter?.isEnabled!=true){status="请先开启手机蓝牙";return}
         val token=generation
-        val link=BleUartTransport(getApplication(),
-            lost={ main.post { if(token==generation && connected) fail("蓝牙连接已断开") } },
-            received={ bytes -> main.post { if(token==generation)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } } },generic=mode==LinkMode.BLE_UART)
-        transport=link;lastReceived="—";connecting=true;status="连接 ${row.name}…"
-        adapter.cancelDiscovery()
-        connectJob=viewModelScope.launch {
-            try {
-                val watchdog=launch { delay(12000);if(token==generation && connecting)fail("连接超时，请检查模块供电与 BLE 模式") }
-                try { link.open(row.device) } finally { watchdog.cancel() }
-                if(token!=generation || !foreground){link.close();return@launch}
-                connected=true;connecting=false;status="已连接 ${row.name} · 请手动使能";sent=0
-                startSending(link,token)
-            } catch(e: CancellationException){throw e} catch(e: Exception){if(token==generation)fail(e.message ?: "连接失败")}
-        }
-    }
-    private fun startSending(link: BluetoothTransport, token: Int) {
-        sendJob=viewModelScope.launch {
-            try {
-                while(isActive && token==generation && foreground) {
-                    val frame=ControlProtocol.encode(session.state,sequence++)
-                    // Await each write before sampling again: no queue of old stick positions.
-                    link.send(frame)
-                    if(token!=generation)return@launch
-                    sent++;lastFrame=frame.joinToString(" ") { "%02X".format(it.toInt() and 255) }
-                    delay(mode.period)
+        selectedDevice=row;lastReceived="—";lastFrame="—";sent=0;connectionError=""
+        val current=Bt630Session(viewModelScope,
+            linkFactory={ lost -> Bt630GattClient(getApplication(),row.device,viewModelScope,lost) { bytes ->
+                main.post { if(token==generation && foreground)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } }
+            } },
+            frame={ ControlProtocol.encode(session.state,sequence++) },
+            pauseControls={ session.suspendControl();sync() },
+            stateChanged={ state -> if(token==generation)when(state) {
+                is Bt630Session.State.Connecting -> {
+                    connected=false;connecting=true;connectionError=state.error ?: ""
+                    status="连接 ${row.name} · 第 ${state.attempt}/5 次"
                 }
-            } catch(e: CancellationException){throw e} catch(e: Exception){if(token==generation)fail(e.message ?: "发送失败")}
-        }
+                Bt630Session.State.Ready -> { connected=true;connecting=false;connectionError="";status="已连接 ${row.name} · 请手动使能" }
+                is Bt630Session.State.Failed -> { connected=false;connecting=false;connectionError=state.error;status="连接失败 · 请查看帮助" }
+                Bt630Session.State.Idle -> { connected=false;connecting=false;status="未连接" }
+            } },
+            sent={ bytes -> if(token==generation) {
+                sent++;lastFrame=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) }
+            } })
+        btSession=current
+        current.start()
     }
-    private fun fail(message: String) { disconnect();status=message }
     fun disconnect() {
-        generation++;stopScan();transport?.close();transport=null
-        connectJob?.cancel();connectJob=null;sendJob?.cancel();sendJob=null
-        connected=false;connecting=false;session.suspendControl();sync();status="未连接"
+        generation++;stopScan();btSession?.stop();btSession=null
+        selectedDevice=null;connectionError="";connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }
     fun foreground(value: Boolean) { foreground=value;if(!value)disconnect() }
     fun axes(left: Boolean,x: Int,y: Int) {
