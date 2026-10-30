@@ -276,6 +276,24 @@ class Bt630GattClientTest {
         verify(f.gatt).close()
     }
 
+    @Test fun lateConnectResultStillClosesWhenDisconnectPermissionWasRevoked() = runTest {
+        val f = Fixture(this)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        doAnswer {
+            entered.countDown()
+            release.await(2, TimeUnit.SECONDS)
+            f.gatt
+        }.`when`(f.device).connectGatt(eq(f.context), eq(false), any(BluetoothGattCallback::class.java), eq(BluetoothDevice.TRANSPORT_LE))
+        doThrow(SecurityException("revoked")).`when`(f.gatt).disconnect()
+        val opening = async(Dispatchers.Default) { runCatching { f.client.open() } }
+        assertTrue(entered.await(2, TimeUnit.SECONDS))
+        f.client.close()
+        release.countDown()
+        opening.await()
+        verify(f.gatt).close()
+    }
+
     @Test fun closeCannotPassAWriteBetweenValidationAndPlatformCall() = runTest {
         val f = Fixture(this, notify = false)
         val characteristic = mock(BluetoothGattCharacteristic::class.java)

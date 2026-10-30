@@ -50,7 +50,7 @@ class Bt630GattClient(
             val connection = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
                 ?: throw Bt630Failure("GATT connection could not start")
             synchronized(guard) {
-                if (generation == token) gatt = connection else { connection.disconnect(); connection.close() }
+                if (generation == token) gatt = connection else dispose(connection)
             }
             try { withTimeout(10_000) { pending.await() } }
             catch (_: TimeoutCancellationException) { throw Bt630Failure("GATT connection timed out (10 s)") }
@@ -112,8 +112,12 @@ class Bt630GattClient(
             old = gatt
             gatt = null
         }
-        try { old?.disconnect() } catch (_: SecurityException) { }
-        try { old?.close() } catch (_: SecurityException) { }
+        old?.let(::dispose)
+    }
+
+    private fun dispose(connection: BluetoothGatt) {
+        try { connection.disconnect() } catch (_: SecurityException) { }
+        try { connection.close() } catch (_: SecurityException) { }
     }
 
     private fun closeCurrent(token: Long) = synchronized(guard) {

@@ -23,3 +23,7 @@ Task 1 does not wire ViewModel/UI or change STM32 firmware. Source flow is adapt
 - The coordinator's CI run 41077312729 passed the original Task 1 checkpoint: Android full unit task and APK build, plus STM32 job. Exact XML counts were being collected separately.
 - Review findings addressed: legacy two-argument notification callback, exception-safe GATT disconnect/close and session stop, serialized send/close platform boundary, and loss check after open before Ready/sending. Focused tests cover each behavior.
 - The expanded pure JVM session suite passes 17/17 locally; production Kotlin sources compile against Android 35. Native review-fix tests and full Android suite await CI after this fix commit.
+
+## Scoped re-review follow-up
+
+A late `connectGatt` result whose generation was invalidated now uses the same exception-safe disconnect/close helper. The focused test blocks `connectGatt`, closes the client, then returns a GATT whose disconnect throws `SecurityException` and checks that close is attempted. Native GREEN for this additional test awaits CI. Pure session tests remain 17/17; production Kotlin compilation and diff check pass locally.
