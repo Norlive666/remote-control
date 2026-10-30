@@ -96,6 +96,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private var scanner: android.bluetooth.le.BluetoothLeScanner?=null
     private var scanTimeout: Runnable?=null
     private var scanReceiver: BroadcastReceiver?=null
+    private var adapterStateReceiver: BroadcastReceiver?=null
     private var systemScanActive=false
     private var systemScanStarted=false
     private var bleResults=0
@@ -240,7 +241,30 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         generation++;stopScan();btSession?.stop();btSession=null
         selectedDevice=null;connectionError="";connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }
-    fun foreground(value: Boolean) { foreground=value;if(!value)disconnect() }
+    fun foreground(value: Boolean) {
+        foreground=value
+        if(value) {
+            if(adapterStateReceiver==null) {
+                val receiver=object: BroadcastReceiver() {
+                    override fun onReceive(context: Context,intent: Intent) {
+                        if(adapterStateReceiver!==this || !foreground || intent.action!=BluetoothAdapter.ACTION_STATE_CHANGED)return
+                        when(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.ERROR)) {
+                            BluetoothAdapter.STATE_TURNING_OFF,BluetoothAdapter.STATE_OFF -> { disconnect();status="蓝牙已关闭" }
+                        }
+                    }
+                }
+                val application=getApplication<Application>()
+                val filter=IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+                if(Build.VERSION.SDK_INT>=33)application.registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED)
+                else application.registerReceiver(receiver,filter)
+                adapterStateReceiver=receiver
+            }
+        } else {
+            val receiver=adapterStateReceiver;adapterStateReceiver=null
+            if(receiver!=null)getApplication<Application>().unregisterReceiver(receiver)
+            disconnect()
+        }
+    }
     fun axes(left: Boolean,x: Int,y: Int) {
         if(layoutEditing)return
         val (mappedX,mappedY)=stickConfigs[if(left)0 else 1].map(x,y)
@@ -321,7 +345,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
     private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions;layoutScales=layoutSession.scales }
     private fun sync() { controls=session.state }
-    override fun onCleared() { disconnect();super.onCleared() }
+    override fun onCleared() { foreground(false);super.onCleared() }
     companion object {
         val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable","leftPad","rightPad")
     }
