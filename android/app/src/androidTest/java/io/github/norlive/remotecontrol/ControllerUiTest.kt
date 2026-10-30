@@ -2,6 +2,7 @@ package io.github.norlive.remotecontrol
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -217,12 +218,26 @@ class ControllerUiTest {
     }
     @Test fun connectionDialogKeepsListAndActionsVisibleAndHidesDiagnosticsUntilHelp() {
         compose.onNodeWithTag("connection-open").performClick()
+        val vm=model()
+        val adapter=compose.activity.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        compose.runOnIdle {
+            val callback=RemoteViewModel::class.java.getDeclaredField("scanCallback").apply { isAccessible=true }.get(vm) as android.bluetooth.le.ScanCallback
+            repeat(12) { index ->
+                val device=adapter.getRemoteDevice("F2:E7:05:FA:F8:%02X".format(index))
+                callback.onScanResult(1,android.bluetooth.le.ScanResult(device,null,-50,1))
+            }
+        }
+        compose.waitUntil(5000) { vm.devices.size==12 }
         compose.onNodeWithTag("bt630-dialog").assertExists()
         compose.onNodeWithTag("bt630-device-list").assertIsDisplayed()
         compose.onNodeWithTag("bt630-scan").assertIsDisplayed()
         compose.onNodeWithTag("bt630-cancel").assertIsDisplayed()
         compose.onNodeWithTag("bt630-help").assertExists()
         compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertDoesNotExist()
+        compose.onNodeWithTag("bt630-device-list").performScrollToIndex(11)
+        compose.onNodeWithTag("bt630-device-F2:E7:05:FA:F8:0B").assertIsDisplayed()
+        compose.onNodeWithTag("bt630-cancel").assertIsDisplayed()
+        compose.onNodeWithTag("bt630-help").assertIsDisplayed()
         val image=compose.onNodeWithTag("bt630-dialog").captureToImage().asAndroidBitmap()
         val file=File(compose.activity.getExternalFilesDir(null),"bt630-connection.png")
         FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
@@ -246,6 +261,24 @@ class ControllerUiTest {
         compose.runOnIdle { vm.refreshDevices();assertTrue(vm.connecting) }
         compose.onNodeWithTag("bt630-cancel").assertExists().performClick()
         compose.runOnIdle { assertFalse(vm.connecting);assertFalse(vm.connected) }
+    }
+    @Test fun refreshKeepsConnectedStateAndDiscoveredRows() {
+        val vm=model()
+        val adapter=compose.activity.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        val device=adapter.getRemoteDevice("F2:E7:05:FA:F8:F2")
+        val row=DeviceRow("BT630",device.address,device,viaBle=true)
+        compose.runOnIdle {
+            @Suppress("UNCHECKED_CAST")
+            val connected=RemoteViewModel::class.java.getDeclaredField("connected\$delegate").apply { isAccessible=true }.get(vm) as MutableState<Boolean>
+            @Suppress("UNCHECKED_CAST")
+            val devices=RemoteViewModel::class.java.getDeclaredField("devices\$delegate").apply { isAccessible=true }.get(vm) as MutableState<List<DeviceRow>>
+            connected.value=true
+            devices.value=listOf(row)
+            vm.refreshDevices()
+            assertTrue(vm.connected)
+            assertEquals(listOf(row),vm.devices)
+            vm.disconnect()
+        }
     }
     @Test fun fourWayTouchSnapsAndReleaseZerosAndModeReloads() {
         compose.runOnIdle { model().setStickConfig(0,JoystickConfig(mode=JoystickMode.FOUR_WAY)) }
