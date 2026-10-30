@@ -242,6 +242,11 @@ class ControllerUiTest {
         val file=File(compose.activity.getExternalFilesDir(null),"bt630-connection.png")
         FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         assertTrue(file.length()>0)
+        // Gradle uninstalls the tested app afterward, so export before its files are removed.
+        val exported=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "cp /sdcard/Android/data/io.github.norlive.remotecontrol/files/bt630-connection.png /sdcard/Download/bt630-connection.png 2>&1")
+        val output=android.os.ParcelFileDescriptor.AutoCloseInputStream(exported).bufferedReader().use { it.readText() }
+        assertTrue(output,output.isBlank())
         compose.onNodeWithTag("bt630-help").performClick()
         compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertExists()
     }
