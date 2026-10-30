@@ -1,6 +1,6 @@
 # Remote Control v1 协议
 
-HC-05（SPP 字节流）和 BT630（BLE FFF2 写入，经 UART 透传）使用同一帧。
+BT630 通过 BLE FFF2 写入，经 UART 透传给 STM32；App v1.6.0 只保留 BT630 连接。
 固定 20 字节、所有多字节数字小端序，不传 C 结构体内存布局。
 
 | 字节 | 类型 | 内容 |

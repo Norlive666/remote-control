@@ -1,12 +1,5 @@
 # Third-party notices
 
-## Nordic Android BLE Library 2.11.0
-
-https://github.com/nordicsemi/Android-BLE-Library
-
-Used as an Android BLE communication dependency. BSD-3-Clause license, reproduced
-in `licenses/nordic-ble.txt` and bundled with the APK as an asset.
-
 ## bb8-app
 
 https://github.com/Alexei-Simons/bb8-app
