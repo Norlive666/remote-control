@@ -33,3 +33,17 @@ AndroidX / Compose components and Kotlin runtime/coroutines are used as Android
 application dependencies under Apache License 2.0. The full license is reproduced
 in `licenses/apache-2.0.txt` and bundled with the APK as an asset. Upstream sources
 remain at the links above; this project does not modify those libraries.
+
+## bt_mcu
+
+https://gitee.com/xie-rongji/bt_mcu
+
+Native BLE connection, service discovery, notification and write flow adapted
+from `app/src/main/java/xnj/lazydog/btcontroller/Bluetooth/BlueToothMaster.java`,
+commit `10dddc6c52c43b3bd8e20f377237d8eb7eb68fe4` (xie-rongji / 谢荣基).
+The adaptation uses explicit foreground connections, fixed BT630 UUIDs,
+serialized callback-checked operations, cancellation and bounded timeouts;
+it does not include the upstream SPP transport or debugger packet protocol.
+Mulan Permissive Software License v2, reproduced unmodified in
+`licenses/bt-mcu.txt` and bundled with the APK as
+`assets/licenses/bt-mcu.txt`.
