@@ -37,7 +37,7 @@ class ConnectionServiceTest {
         val service=Robolectric.buildService(ConnectionService::class.java).create().get()
         assertEquals(android.app.Service.START_NOT_STICKY,service.onStartCommand(intent(),0,1))
         assertTrue(vm.retainsBackground)
-        vm.axes(true,700,400);vm.slider(0,2)
+        vm.axes(true,700,400);vm.slider(0,1000)
         vm.foreground(false)
         assertEquals(700,vm.controls.lx)
         assertEquals(2,vm.controls.slider1)
@@ -93,6 +93,7 @@ class ConnectionServiceTest {
     }
     @Test fun activeSenderKeepsEnabledValuesAndSequenceAcrossBackgroundAndReturn() = runTest {
         val vm=prepare()
+        repeat(4) { vm.setSliderConfig(it,SliderConfig(stepped=false)) }
         val state=RemoteViewModel::class.java.getDeclaredField("session").apply { isAccessible=true }.get(vm) as ControlSession
         val frames=mutableListOf<ByteArray>()
         var sequence=0
@@ -106,7 +107,8 @@ class ConnectionServiceTest {
         val service=Robolectric.buildService(ConnectionService::class.java).create()
         service.get().onStartCommand(intent(),0,1)
         engine.start();runCurrent()
-        state.enable(true);vm.axes(true,700,400);vm.slider(0,2)
+        state.enable(true);vm.axes(true,700,400)
+        vm.slider(0,123);vm.slider(1,456);vm.slider(2,789);vm.slider(3,1000)
         val before=frames.size
         vm.foreground(false)
         advanceTimeBy(100);runCurrent()
@@ -115,12 +117,21 @@ class ConnectionServiceTest {
         assertEquals(20,retained.size)
         assertEquals(1,retained[17].toInt() and 1)
         assertEquals(700,(retained[4].toInt() and 255) or ((retained[5].toInt() and 255) shl 8))
-        assertEquals(2,vm.controls.slider1)
+        assertArrayEquals(intArrayOf(123,456,789,1000),intArrayOf(vm.controls.slider1,vm.controls.slider2,vm.controls.slider3,vm.controls.slider4))
         assertSame(vm,(RuntimeEnvironment.getApplication() as RemoteApplication).controller)
         vm.foreground(true)
         assertTrue(vm.controls.enabled)
         advanceTimeBy(40);runCurrent()
         frames.zipWithNext().forEach { (a,b) -> assertEquals((a[3].toInt()+1) and 255,b[3].toInt() and 255) }
+        frames.drop(before).forEach { frame ->
+            val packed=(frame[12].toLong() and 255) or ((frame[13].toLong() and 255) shl 8) or
+                ((frame[14].toLong() and 255) shl 16) or ((frame[15].toLong() and 255) shl 24) or
+                ((frame[16].toLong() and 255) shl 32)
+            assertEquals(123L,packed and 1023)
+            assertEquals(456L,(packed ushr 10) and 1023)
+            assertEquals(789L,(packed ushr 20) and 1023)
+            assertEquals(1000L,(packed ushr 30) and 1023)
+        }
         vm.disconnect()
         val stopped=frames.size
         advanceTimeBy(100);runCurrent()

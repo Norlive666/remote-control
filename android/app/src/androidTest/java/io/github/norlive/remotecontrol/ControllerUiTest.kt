@@ -617,7 +617,7 @@ class ControllerUiTest {
         compose.runOnIdle {
             val session=RemoteViewModel::class.java.getDeclaredField("session").apply { isAccessible=true }.get(original) as ControlSession
             session.enable(true)
-            original.setStickConfig(0,JoystickConfig(deadZonePercent=0));original.axes(true,700,400);original.slider(0,2)
+            original.setStickConfig(0,JoystickConfig(deadZonePercent=0));original.axes(true,700,400);original.slider(0,1000)
         }
         compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
         assertEquals(700,original.controls.lx)
