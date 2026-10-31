@@ -69,7 +69,6 @@ static void publish(const uint8_t *p) {
     uint8_t seq=p[3], flags=p[16], delta=(uint8_t)(seq-last_seq);
     unsigned i;
     uint32_t key=lock();
-    if (expired && (flags&1u)) { unlock(key); return; } /* Recovery needs a disabled frame. */
     if (!expired && have_seq && (delta==0 || delta>=128)) { unlock(key); return; }
     have_seq=1; last_seq=seq; expired=0; age_ms=0;
     g_rc.sequence=seq; g_rc.link_valid=1; g_rc.valid_frames++;

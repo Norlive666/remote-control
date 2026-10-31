@@ -32,7 +32,8 @@ int main(void) {
     /* Known CCITT-FALSE fixture: seq 1, axes +1000/-1000, slider 1000, enabled => 0x1f82. */
     const uint8_t golden[20] = {0xa5,0x5a,1,1,0xe8,3,0x18,0xfc,0,0,0,0,0xe8,3,0,0,1,0,0x82,0x1f};
     feed(golden, 20); s=state();
-    assert(!s.enabled && !s.link_valid && s.valid_frames==0); /* Reboot cannot accept old enabled stream. */
+    assert(s.enabled && s.link_valid && s.valid_frames==1 && s.sequence==1); /* Enabled startup establishes the baseline. */
+    fresh_reset();
     frame(f,0,0,0,0); feed(f,20); s=state();
     assert(!s.enabled && s.link_valid && s.valid_frames==1 && s.sequence==0);
     feed(golden, 7); assert(state().enabled == 0);
@@ -51,10 +52,17 @@ int main(void) {
     assert(state().sequence==3);
     ticks(299); assert(state().enabled);
     ticks(1); assert(!state().enabled && !state().axes[0] && !state().sliders[0]);
-    /* Recovery needs a fresh disabled frame before enabling. */
-    frame(f,200,1000,1000,1); feed(f,20); assert(!state().enabled);
-    frame(f,200,1000,1000,0); feed(f,20); assert(!state().enabled);
-    frame(f,201,1000,1000,1); feed(f,20); assert(!state().enabled);
+    /* Bad frames cannot recover; the first valid enabled frame establishes a new baseline. */
+    assert(state().stopped && !state().link_valid);
+    frame(f,200,1000,1000,1); f[18]^=1; feed(f,20);
+    assert(state().stopped && !state().enabled && !state().link_valid);
+    frame(f,200,1001,1000,1); feed(f,20);
+    assert(state().stopped && !state().enabled && !state().link_valid);
+    frame(f,200,1000,1000,1); feed(f,20); s=state();
+    assert(s.enabled && !s.stopped && s.link_valid && s.sequence==200 && s.axes[0]==1000 && s.sliders[0]==1000);
+    frame(f,200,-1000,0,1); feed(f,20); assert(state().axes[0]==1000);
+    frame(f,199,-1000,0,1); feed(f,20); assert(state().sequence==200 && state().axes[0]==1000);
+    frame(f,201,1000,1000,0); feed(f,20); assert(state().enabled && state().sequence==200);
     frame(f,202,0,0,0); feed(f,20); assert(state().sequence==202);
     frame(f,203,1000,1000,1); feed(f,20); assert(state().enabled && state().axes[0]==1000);
     frame(f,203,0,0,0); feed(f,20); ticks(299); assert(state().enabled);
@@ -97,9 +105,10 @@ int main(void) {
     frame(f,40,0,0,0); feed(f,20); /* Duplicate. */
     s=state(); assert(s.valid_frames==1 && s.crc_errors==1);
     ticks(300); s=state(); assert(!s.link_valid && !s.enabled && s.valid_frames==1 && s.crc_errors==1);
-    frame(f,41,1000,1000,1); feed(f,20); assert(state().valid_frames==1);
+    frame(f,41,1000,1000,1); feed(f,20); s=state();
+    assert(s.enabled && !s.stopped && s.link_valid && s.valid_frames==2 && s.crc_errors==1 && s.sequence==41);
     frame(f,42,0,0,0); feed(f,20);
-    s=state(); assert(s.link_valid && !s.enabled && s.valid_frames==2 && s.crc_errors==1 && s.sequence==42);
+    s=state(); assert(s.link_valid && !s.enabled && s.valid_frames==3 && s.crc_errors==1 && s.sequence==42);
     fresh_reset(); s=state(); assert(!s.link_valid && s.valid_frames==0 && s.crc_errors==0);
     puts("remote control behavior: pass");
     return 0;

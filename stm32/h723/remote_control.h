@@ -35,7 +35,8 @@ extern volatile RC_State_t g_rc;
  * HAL_BUSY: UART DMA/IRQ/transmit active, or timer occupied; no state changed.
  * Do not use this UART concurrently with HAL or another protocol after Init.
  * Same-baud repeated Init is a no-op; different baud returns HAL_BUSY.
- * UART/TIM HAL modules and generated peripheral/IRQ files are not required. */
+ * UART/TIM HAL modules and generated peripheral/IRQ files are not required.
+ * After Init/Reset or timeout, the first valid frame may enable control directly. */
 HAL_StatusTypeDef RC_Init(void);
 HAL_StatusTypeDef RC_InitBT630(void);
 HAL_StatusTypeDef RC_InitBaud(uint32_t baud);

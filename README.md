@@ -8,7 +8,7 @@
 
 安装 APK：[v1.6.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.6.0/remote-control-v1.6.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.2.1/remote-control-stm32-v2.2.1.zip)。
+驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.3.0/remote-control-stm32-v2.3.0.zip)。
 
 BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移植与排障指南](docs/bt630-porting.md)，包含 `BLE 写入失败 -5` 与 UART/定时器分频的区别。
 
@@ -38,7 +38,7 @@ BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移�
 - BT630 名义 50 Hz（1000 字节/秒），实际速率包含等待写入完成的时间。每次写入完成后延迟 20 ms，再采样最新状态，没有历史控制帧队列。
 - 摇杆四轴为 −1000～1000；滑块发送配置的实际值（0～1000），默认三档 0、1、2，初始为 0，使能关闭，禁用状态在线上始终发送零控制量。
 - 关闭「使能」即持续发送零控制量；中央蓝牙卡负责连接。
-- App 进入后台或断开时关闭使能和蓝牙。STM32 连续 300 ms 未收到有效新帧时归零、禁用并置停止；初始化、MCU 重启和恢复连接都先通过禁用帧建立序号基线，再手动使能。MCU 重启时手机仍使能的情况，请先关闭使能再开启。
+- App 进入后台或断开时关闭使能和蓝牙。STM32 连续 300 ms 未收到有效新帧时归零、禁用并置停止。驱动 v2.3.0 起，初始化、重置或超时后的首个合法帧即可建立序号基线，允许使能帧直接恢复输出；仅 MCU 超时且手机仍使能时，通信恢复后无需切换使能。App 主动断开、进入后台或实际重连仍会关闭使能，需手动重新开启。
 - App 的「已连接」「已提交帧数」仅表示蓝牙连接和写入调用结果，**不表示 STM32 已确认收到**。v1 没有收包 ACK。
 - 本项目接收驱动不直接控制电机。业务程序必须检查 `link_valid`、`enabled` 和 `stopped` 后才使用控制量。
 
@@ -62,7 +62,7 @@ if (state.link_valid && state.enabled && !state.stopped) {
 
 H723：USART3，PD8 TX → 模块 RX、PD9 RX ← 模块 TX，TIM5。F103：USART1，PA9 TX → 模块 RX、PA10 RX ← 模块 TX，TIM4。两端共地，UART 电平3.3V，模块供电按模块规格。驱动自动初始化对应GPIO、USART、定时器和NVIC，无需CubeMX配置或生成uart.c/tim.c，无需UART/TIM HAL模块。基础HAL/RCC（H723包括RCCEx）、启动文件和系统时钟仍由原工程提供。
 
-v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。v2.2.1下载包的 `RC_DEFAULT_BAUD` 默认115200；H723的 `RC_RX_INVERT` 默认1，与本机实测D-Bus接口配置一致，直接连接PD9时改为0。F103默认115200、不反相，不支持硬件反相。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
+v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。当前下载包的 `RC_DEFAULT_BAUD` 默认115200；H723的 `RC_RX_INVERT` 默认1，与本机实测D-Bus接口配置一致，直接连接PD9时改为0。F103默认115200、不反相，不支持硬件反相。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
 
 ## 协议和构建
 
