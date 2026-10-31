@@ -87,6 +87,7 @@ jobs:
             adb shell cmd location set-location-enabled true
             ./android/gradlew -p android connectedDebugAndroidTest --stacktrace
             adb pull /sdcard/Download/bt630-connection.png bt630-connection.png
+            adb pull /sdcard/Download/custom-controls.png custom-controls.png
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n io.github.norlive.remotecontrol/.MainActivity
             sleep 2
@@ -99,5 +100,6 @@ jobs:
           path: |
             controller.png
             bt630-connection.png
+            custom-controls.png
             android/app/build/outputs/androidTest-results/
             android/app/build/reports/androidTests/

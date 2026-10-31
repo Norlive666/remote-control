@@ -1,13 +1,13 @@
 # BT630 移植与排障指南
 
-更新日期：2026-10-31。以本仓库 STM32 驱动 `stm32-v2.3.0` 和 Android App `v1.6.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
+更新日期：2026-10-31。以本仓库 STM32 驱动 `stm32-v3.0.0` 和 Android App `v1.7.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
 
 本文说明怎样把 BT630 接到新的 STM32 HAL 工程，以及怎样区分手机连接、UART 接收、协议解析和业务控制问题。芯片通用说明见 [STM32 接入文档](stm32.md)，完整帧格式见 [协议文档](../protocol/README.md)。
 
 ## 1. 下载与通信链路
 
 - [Android APK v1.6.0](https://github.com/Norlive666/remote-control/releases/download/v1.6.0/remote-control-v1.6.0.apk)：Android 8.0 及以上。
-- [STM32 驱动包 v2.3.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.3.0/remote-control-stm32-v2.3.0.zip)：H723、F103 两套独立的 `.c/.h`。
+- [STM32 驱动包 v3.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.0.0/remote-control-stm32-v3.0.0.zip)：H723、F103 两套独立的 `.c/.h`。
 - 仓库源码：[H723](../stm32/h723/)、[F103](../stm32/f103/)。一次只加入与芯片匹配的一套。
 
 ```text
@@ -151,12 +151,12 @@ if (rc_state.link_valid && rc_state.enabled && !rc_state.stopped) {
 
 ## 5. 协议、状态与首次验证
 
-每帧 20 字节，以 `A5 5A` 开始，包含版本、序号、四个有符号轴值、两个滑块、标志和 CRC。多字节字段小端；不能把原始字节直接强转为 `RC_State_t`。帧可被拆开或连续到达，接收端逐字节处理，不以一次中断或一次 BLE 写入作为 UART 帧边界。
+每帧 20 字节，以 `A5 5A` 开始，包含版本、序号、四个有符号轴值、四路滑块值、标志和 CRC。App v1.7.0发送v2帧，驱动v3.0.0也兼容旧v1两路帧，旧帧缺少的两路会清零；旧驱动无法解析新App帧。多字节字段小端；不能把原始字节直接强转为 `RC_State_t`。帧可被拆开或连续到达，接收端逐字节处理，不以一次中断或一次 BLE 写入作为 UART 帧边界。
 
 | 观察项 | 含义 / 正常表现 |
 | --- | --- |
 | `axes[0..3]` | 左 X、左 Y、右 X、右 Y，范围 -1000～1000；正方向为右、上 |
-| `sliders[0..1]` | 两滑块的实际整数，0～1000；App 默认三档 0/1/2 |
+| `sliders[0..3]` | 四通道的实际整数，0～1000；App 默认三档 0/1/2 |
 | `enabled` / `stopped` | 使能 / 停止状态；输出有效需同时满足使能且未停止 |
 | `link_valid` | 接受有效新帧后为 1，初始化及超时后为 0 |
 | `valid_frames` | 累计接受的有效新帧，包含禁用帧；连续通信时应持续增加 |
@@ -166,7 +166,7 @@ if (rc_state.link_valid && rc_state.enabled && !rc_state.stopped) {
 
 1. 观察 `g_rc_init_status == HAL_OK`。
 2. 手机选择 BT630 BLE 并连接，保持使能关闭；确认 `valid_frames` 持续增长、`link_valid=1`。此时控制量为零是预期行为。
-3. 打开使能，分别移动左右摇杆和两个滑块，检查字段映射及范围。
+3. 打开使能，分别移动左右摇杆和默认两个滑块，再添加目标通道3/4的组件，检查字段映射、备注、点按/长按/切换及范围。
 4. 松开摇杆应归零；断开蓝牙后，在正确的 1 ms 定时基准下约 300 ms 内应禁用、归零、`stopped=1`、`link_valid=0`。
 5. App 重新连接后仍需手动开启使能。STM32 驱动 v2.3.0 起，初始化、重置或接收超时后的首个合法使能帧可以直接恢复输出；手机使能保持开启时，不再要求关闭再开启。旧驱动 v2.2.1 及更早版本仍要求先收到禁用帧。
 

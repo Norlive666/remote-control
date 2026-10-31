@@ -1,14 +1,14 @@
 # Remote Control / 蓝牙遥控面板
 
-横屏 Android 遥控 App：浅色圆角卡片布局、双摇杆、双滑块，可拖动编辑位置与大小，使用 **飞易通 FSC-BT630 BLE** 连接和 20 字节控制协议，支持失败重试与意外断线重连。STM32 提供 H723VGT6、F103C8T6 的独立 `.c/.h` 接收驱动。
+横屏 Android 遥控 App：浅色圆角卡片布局、双摇杆、默认双滑块，可在设置中添加带备注的按键和滑块，支持四路 slider 输出，可拖动编辑位置与大小，使用 **飞易通 FSC-BT630 BLE** 连接和 20 字节控制协议，支持失败重试与意外断线重连。STM32 提供 H723VGT6、F103C8T6 的独立 `.c/.h` 接收驱动。
 
 ![实际界面](docs/controller.png)
 
 ## 下载与开始测试
 
-安装 APK：[v1.6.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.6.0/remote-control-v1.6.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+安装 APK：[v1.7.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.7.0/remote-control-v1.7.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v2.3.0/remote-control-stm32-v2.3.0.zip)。
+驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.0.0/remote-control-stm32-v3.0.0.zip)。
 
 BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移植与排障指南](docs/bt630-porting.md)，包含 `BLE 写入失败 -5` 与 UART/定时器分频的区别。
 
@@ -24,6 +24,17 @@ BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移�
 **UART 参数属于模块配置，手机连接不会修改它。**STM32 初始化波特率应与模块实际参数一致；如模块已配置为 115200，可用 `RC_InitBaud(115200)`。
 
 连接失败或意外断线时，一轮最多尝试 5 次（含首次），间隔 1、2、4、4 秒，可随时取消。稳定连接满 10 秒后，下一次意外断线可开启新一轮；刚连上就失败不会无限重试。主动断开、App 后台或取消会停止重试。重连后使能保持关闭，需手动重新开启；不重放断线前的控制帧。服务/特征不匹配、缺少权限、蓝牙关闭等明确配置问题直接停止。
+
+## 自定义组件与四路输出（v1.7.0）
+
+默认仍是两个滑块。在功能选项的组件管理中添加、修改或删除组件，设置名称、下方一行小字备注和目标通道 slider1～4（STM32 对应 `sliders[0..3]`），所有数值范围0～1000。新增组件沿用布局编辑的拖动、30%～250%缩放和保存功能，重启后保留。
+
+- 普通按钮：按下输出设定值，松手或取消归零。
+- 长短按按钮：不足500ms松手，输出短按值100ms后归零；按住达到500ms输出长按值，松手归零；短按与长按互斥。100ms是App输出状态持续时间，不代表STM32已确认收到脉冲。
+- 点击切换：每次点击切换至下一个配置值，例如0→1→2→0，松手保持，无需滑动。
+- 滑块：保留连续/分档功能，可添加第三、第四通道；现有默认两个滑块不变。
+
+**安装新App前请升级STM32驱动到v3.0.0。** App改发v2四路帧，仍为20字节；新驱动同时接收旧版v1两路帧，旧帧缺少的两路清零。旧驱动不能解析新版App的v2帧。必须一起重新编译驱动`.c/.h`及使用`RC_State_t`的业务代码；保留实际板卡的波特率、反相和已有接收修补，初始化函数不变。已有本地定制驱动应合并升级，避免覆盖原有诊断与波形处理。
 
 ## 蓝牙扫描权限
 
@@ -56,7 +67,7 @@ if (RC_Init() != HAL_OK) Error_Handler(); /* 下载包默认115200，用于BT630
 RC_State_t state;
 RC_GetState(&state);
 if (state.link_valid && state.enabled && !state.stopped) {
-    /* state.axes[0..3], state.sliders[0..1] */
+    /* state.axes[0..3], state.sliders[0..3] */
 }
 ```
 
