@@ -10,7 +10,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import android.Manifest
 import android.os.Build
-import androidx.lifecycle.ViewModelProvider
 import org.junit.Before
 import org.junit.Assert.*
 import org.junit.Rule
@@ -23,7 +22,7 @@ import java.io.FileOutputStream
 class ControllerUiTest {
     @get:Rule val permissions=GrantPermissionRule.grant(*if(Build.VERSION.SDK_INT>=31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION) else arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION))
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
-    private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
+    private fun model()=(compose.activity.application as RemoteApplication).controller
     @Before fun resetSavedLayout() {
         compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
     }
@@ -206,7 +205,7 @@ class ControllerUiTest {
     @Test fun oldModePreferencesCannotChangeBt630Panel() {
         val prefs=compose.activity.application.getSharedPreferences("controller",0)
         for(oldMode in listOf("HC05","BLE_UART")) {
-            compose.runOnIdle { prefs.edit().putString("mode",oldMode).commit();compose.activity.viewModelStore.clear() }
+            compose.runOnIdle { prefs.edit().putString("mode",oldMode).commit();(compose.activity.application as RemoteApplication).viewModelStore.clear() }
             compose.activityRule.scenario.recreate()
             compose.onNodeWithTag("connection-open").assertExists()
             compose.onNodeWithText("FSC-BT630",useUnmergedTree=true).assertExists()
@@ -375,7 +374,7 @@ class ControllerUiTest {
                 .putBoolean("layout.padCanvas",false)
                 .putFloat("layout.leftPad.x",.2f).putFloat("layout.leftPad.y",.8f).putFloat("layout.leftPad.scale",1.5f)
                 .putFloat("layout.rightPad.x",.8f).putFloat("layout.rightPad.y",.8f).putFloat("layout.rightPad.scale",1.5f).commit()
-            compose.activity.viewModelStore.clear()
+            (compose.activity.application as RemoteApplication).viewModelStore.clear()
         }
         compose.activityRule.scenario.recreate()
         compose.waitUntil(5000) { compose.activity.application.getSharedPreferences("controller",0).getBoolean("layout.padCanvas",false) }

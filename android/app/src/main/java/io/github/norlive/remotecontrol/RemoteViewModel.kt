@@ -113,7 +113,57 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private var systemScanNote="未启动"
     private var generation=0
     private var foreground=false
+    private var gamepadDeviceId: Int?=null
+    private val inputManager=application.getSystemService(android.hardware.input.InputManager::class.java)
+    private var inputObserverRegistered=false
+    private val inputObserver=object: android.hardware.input.InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(id: Int) {}
+        override fun onInputDeviceChanged(id: Int) {}
+        override fun onInputDeviceRemoved(id: Int) {
+            if(id==gamepadDeviceId) { suspendGamepad();gamepadDevice(null) }
+        }
+    }
     private var sequence=0
+    var keepBackground by mutableStateOf(preferences.getBoolean("connection.background",false)); private set
+    var backgroundOwned by mutableStateOf(false); private set
+    private var serviceGeneration: Int?=null
+    val retainsBackground get()=keepBackground && backgroundOwned && serviceGeneration==generation
+    fun setKeepBackground(value: Boolean) {
+        keepBackground=value
+        preferences.edit().putBoolean("connection.background",value).apply()
+        if(value)startBackgroundService() else {
+            stopBackgroundService()
+            if(!foreground)disconnect()
+        }
+    }
+    private fun startBackgroundService() {
+        if(!keepBackground || !foreground || btSession==null || serviceGeneration==generation)return
+        val token=generation
+        serviceGeneration=token
+        try {
+            getApplication<Application>().startForegroundService(Intent(getApplication(),ConnectionService::class.java).putExtra("generation",token))
+        } catch(e: RuntimeException) { backgroundServiceFailed(token,e.message ?: "后台服务启动失败") }
+    }
+    internal fun ownsService(token: Int)=keepBackground && serviceGeneration==token && generation==token && btSession!=null
+    internal fun backgroundServiceStarted(token: Int): Boolean {
+        if(!ownsService(token))return false
+        backgroundOwned=true
+        return true
+    }
+    internal fun backgroundServiceFailed(token: Int,message: String) {
+        if(serviceGeneration!=token || generation!=token)return
+        disconnect();error("后台连接失败：$message")
+    }
+    internal fun disconnectFromService(token: Int) { if(ownsService(token))disconnect() }
+    private fun stopBackgroundService() {
+        serviceGeneration=null;backgroundOwned=false
+        getApplication<Application>().stopService(Intent(getApplication(),ConnectionService::class.java))
+    }
+    private fun unregisterAdapterObserver() {
+        val receiver=adapterStateReceiver;adapterStateReceiver=null
+        if(receiver!=null)runCatching { getApplication<Application>().unregisterReceiver(receiver) }
+        if(inputObserverRegistered) { inputManager?.unregisterInputDeviceListener(inputObserver);inputObserverRegistered=false }
+    }
 
     fun permissions(granted: Set<String> = emptySet()): Array<String> {
         val required=if(Build.VERSION.SDK_INT>=31)
@@ -226,7 +276,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         selectedDevice=row;lastReceived="—";lastFrame="—";sent=0;connectionError=""
         val current=Bt630Session(viewModelScope,
             linkFactory={ lost -> Bt630GattClient(getApplication(),row.device,viewModelScope,lost) { bytes ->
-                main.post { if(token==generation && foreground)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } }
+                main.post { if(token==generation && (foreground || retainsBackground))lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } }
             } },
             frame={ ControlProtocol.encode(session.state,sequence++) },
             pauseControls={ buttons.cancelAll();session.suspendControl();sync() },
@@ -236,26 +286,30 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                     status="连接 ${row.name} · 第 ${state.attempt}/5 次"
                 }
                 Bt630Session.State.Ready -> { connected=true;connecting=false;connectionError="";status="已连接 ${row.name} · 请手动使能" }
-                is Bt630Session.State.Failed -> { connected=false;connecting=false;connectionError=state.error;status="连接失败 · 请查看帮助" }
+                is Bt630Session.State.Failed -> { connected=false;connecting=false;connectionError=state.error;status="连接失败 · 请查看帮助";stopBackgroundService();if(!foreground)unregisterAdapterObserver() }
                 Bt630Session.State.Idle -> { connected=false;connecting=false;status="未连接" }
             } },
             sent={ bytes -> if(token==generation) {
                 sent++;lastFrame=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) }
             } })
         btSession=current
-        current.start()
+        startBackgroundService()
+        if(token==generation && btSession===current)current.start()
     }
     fun disconnect() {
+        stopBackgroundService()
         buttons.cancelAll();generation++;stopScan();btSession?.stop();btSession=null
+        if(!foreground)unregisterAdapterObserver()
         selectedDevice=null;connectionError="";connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }
     fun foreground(value: Boolean) {
         foreground=value
         if(value) {
+            if(!inputObserverRegistered) { inputManager?.registerInputDeviceListener(inputObserver,main);inputObserverRegistered=true }
             if(adapterStateReceiver==null) {
                 val receiver=object: BroadcastReceiver() {
                     override fun onReceive(context: Context,intent: Intent) {
-                        if(adapterStateReceiver!==this || !foreground || intent.action!=BluetoothAdapter.ACTION_STATE_CHANGED)return
+                        if(adapterStateReceiver!==this || (!foreground && !retainsBackground) || intent.action!=BluetoothAdapter.ACTION_STATE_CHANGED)return
                         when(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.ERROR)) {
                             BluetoothAdapter.STATE_TURNING_OFF,BluetoothAdapter.STATE_OFF -> { disconnect();status="蓝牙已关闭" }
                         }
@@ -267,10 +321,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                 else application.registerReceiver(receiver,filter)
                 adapterStateReceiver=receiver
             }
+            startBackgroundService()
         } else {
-            val receiver=adapterStateReceiver;adapterStateReceiver=null
-            if(receiver!=null)getApplication<Application>().unregisterReceiver(receiver)
-            disconnect()
+            stopScan()
+            if(!retainsBackground) { unregisterAdapterObserver();disconnect() }
         }
     }
     fun axes(left: Boolean,x: Int,y: Int) {
@@ -300,7 +354,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         saveGamepadBindings();sync()
     }
     fun gamepadEvent(description: String) { gamepadInputInfo=description }
-    fun gamepadDevice(name: String?) { gamepadName=name }
+    fun gamepadDevice(name: String?,id: Int?=null) { gamepadName=name;gamepadDeviceId=id }
     fun gamepadPress(button: GamepadButton) {
         if(!foreground || layoutEditing || settingsOpen)return
         val binding=gamepadBindings.getValue(button)
@@ -384,7 +438,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }.getOrElse { defaultPanelControls() }
     private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions;layoutScales=layoutSession.scales }
     private fun sync() { controls=session.state }
-    override fun onCleared() { foreground(false);super.onCleared() }
+    override fun onCleared() { disconnect();unregisterAdapterObserver();super.onCleared() }
     companion object {
         val layoutIds=listOf("leftStick","rightStick","leftSlider","rightSlider","enable","leftPad","rightPad")
     }

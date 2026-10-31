@@ -10,7 +10,6 @@ import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.core.view.WindowCompat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -57,10 +56,16 @@ internal val Line=Color(0xffe6edf5)
 internal val Pad=Color(0xffeaf1f8)
 
 class MainActivity : ComponentActivity() {
-    private val model: RemoteViewModel by viewModels()
+    private val model by lazy { (application as RemoteApplication).controller }
     internal val gamepad by lazy { GamepadInput(this,model) }
     private val permissionRequest=registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if(result.values.all { it })model.refreshDevices() else model.error("请在系统应用设置中允许附近设备和精确位置权限，定位权限仅用于蓝牙搜索")
+    }
+    private val notificationRequest=registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private fun backgroundConnection(value: Boolean) {
+        model.setKeepBackground(value)
+        if(value && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+            notificationRequest.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -70,7 +75,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             MaterialTheme(colorScheme=lightColorScheme(primary=Accent,background=Surface,surface=Color.White,onSurface=Ink,onBackground=Ink,primaryContainer=Pad,onPrimaryContainer=Ink,secondaryContainer=Line,onSecondaryContainer=Ink)) {
-                ControllerScreen(model,::findDevices,{startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))})
+                ControllerScreen(model,::backgroundConnection,::findDevices,{startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))})
             }
         }
     }
@@ -87,7 +92,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth: ()->Unit) {
+private fun ControllerScreen(vm: RemoteViewModel,backgroundConnection: (Boolean)->Unit,scan: ()->Unit,systemBluetooth: ()->Unit) {
     var connectionDialog by remember { mutableStateOf(false) }
     fun action(name: String) {
         when(name) {
@@ -101,7 +106,7 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
         if(vm.connecting)vm.disconnect() else vm.stopScan()
         connectionDialog=false
     }
-    if(vm.settingsOpen) SettingsDialog(vm,onEdit={vm.updateSettingsOpen(false);vm.beginLayoutEdit()}) { vm.updateSettingsOpen(false) }
+    if(vm.settingsOpen) SettingsDialog(vm,backgroundConnection,onEdit={vm.updateSettingsOpen(false);vm.beginLayoutEdit()}) { vm.updateSettingsOpen(false) }
 }
 
 /** Separate gesture scope per stick; a pointer never transfers from one stick to the other. */
@@ -137,12 +142,19 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: Joysti
 }
 
 @Composable
-private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Unit) {
+private fun SettingsDialog(vm: RemoteViewModel,backgroundConnection: (Boolean)->Unit,onEdit: ()->Unit,onClose: ()->Unit) {
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth(.8f).heightIn(max=340.dp)) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose,modifier=Modifier.testTag("settings-done")){Text("完成")} }
                 OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
+                Row(verticalAlignment=Alignment.CenterVertically) {
+                    Checkbox(vm.keepBackground,backgroundConnection,modifier=Modifier.testTag("background-connection"))
+                    Column {
+                        Text("后台保持连接")
+                        Text("保留使能和当前控制值；通知中可手动断开。系统仍可能停止应用。",fontSize=11.sp,color=Muted)
+                    }
+                }
                 PanelControlsSettings(vm)
                 GamepadSettings(vm)
                 SliderSettings(vm)

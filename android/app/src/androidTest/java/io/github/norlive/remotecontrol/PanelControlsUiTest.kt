@@ -6,7 +6,6 @@ import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.*
 import org.junit.Before
@@ -18,7 +17,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PanelControlsUiTest {
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
-    private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
+    private fun model()=(compose.activity.application as RemoteApplication).controller
     private fun reset() {
         model().apply {
             updateSettingsOpen(false);cancelLayoutEdit()

@@ -8,20 +8,20 @@ import android.view.MotionEvent
 import kotlin.math.roundToInt
 
 internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : InputManager.InputDeviceListener {
-    private val manager=context.getSystemService(InputManager::class.java)
+    private val manager=context.applicationContext.getSystemService(InputManager::class.java)
     private val buttons=GamepadButtons()
     private var deviceId: Int?=null
     private var running=false
     private var focused=true
     fun start() { running=true;manager.registerInputDeviceListener(this,null);refresh() }
-    fun stop() { running=false;manager.unregisterInputDeviceListener(this);buttons.clear();vm.suspendGamepad() }
-    fun focus(value: Boolean) { focused=value;if(!value){buttons.clear();if(deviceId!=null)vm.suspendGamepad()} }
+    fun stop() { running=false;manager.unregisterInputDeviceListener(this);buttons.clear();if(!vm.retainsBackground)vm.suspendGamepad() }
+    fun focus(value: Boolean) { focused=value;if(!value){buttons.clear();if(deviceId!=null && !vm.retainsBackground)vm.suspendGamepad()} }
     private fun isGamepad(device: InputDevice)=device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK)
     private fun refresh() {
         val devices=manager.inputDeviceIds.toList().mapNotNull(manager::getInputDevice).filter(::isGamepad)
         val selected=devices.firstOrNull { it.id==deviceId }
         if(selected?.id!=deviceId) { buttons.clear();vm.suspendGamepad() }
-        deviceId=selected?.id;vm.gamepadDevice(selected?.name)
+        deviceId=selected?.id;vm.gamepadDevice(selected?.name,selected?.id)
     }
     override fun onInputDeviceAdded(id: Int) { refresh() }
     override fun onInputDeviceChanged(id: Int) { refresh() }
@@ -36,7 +36,7 @@ internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : 
             buttons.clear()
             if(deviceId!=null)vm.suspendGamepad()
         }
-        deviceId=id;vm.gamepadDevice(device?.name ?: "原生安卓手柄")
+        deviceId=id;vm.gamepadDevice(device?.name ?: "原生安卓手柄",id)
         return true
     }
     fun key(event: KeyEvent): Boolean {
