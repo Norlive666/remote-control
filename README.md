@@ -95,7 +95,7 @@ python3 tools/sign-apk.py app-release-unsigned.apk remote-control.apk \
 
 ### v1.6.0 BT630 连接重构
 
-连接部分移植并适配 bt_mcu 的原生 GATT 流程，只保留 BT630 UUID，移除旧通用串口入口及 Nordic BLE 依赖。新增有上限、可取消的失败重试和意外断线重连，重连后需手动使能；带响应写入优先，错误回调不会被当成成功。连接窗口使用独立滚动的设备列表，长说明与诊断收进帮助。来源和 Mulan PSL v2 许可证见第三方声明。
+连接部分移植并适配 bt_mcu 的原生 GATT 流程，只保留 BT630 UUID，移除旧通用串口入口及 Nordic BLE 依赖。新增有上限、可取消的失败重试和意外断线重连，重连后需手动使能；带响应写入优先，错误回调不会被当成成功。连接窗口使用独立滚动的设备列表，长说明与诊断收进帮助。[连接窗口截图](docs/bt630-connection.png)（模拟器测试设备列表）。来源和 Mulan PSL v2 许可证见第三方声明。
 
 ### X5 Lite / 原生安卓手柄（v1.5.0）
 
