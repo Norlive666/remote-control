@@ -80,4 +80,35 @@ class RemoteViewModelBluetoothStateTest {
         try { app.unregisterReceiver(receiver) } catch(_: IllegalArgumentException) { unregistered=true }
         assertTrue("Adapter state observer must be unregistered",unregistered)
     }
+    @Test fun fifthFailureCannotRestartBackgroundServiceOnReturnOrPreferenceToggle() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val app=RuntimeEnvironment.getApplication<android.app.Application>()
+        app.getSharedPreferences("controller",0).edit().clear().commit()
+        val vm=RemoteViewModel(app)
+        try {
+            shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+            val adapter=app.getSystemService(BluetoothManager::class.java).adapter
+            shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
+            val device=mock(BluetoothDevice::class.java)
+            vm.foreground(true);vm.setKeepBackground(true)
+            vm.connect(DeviceRow("BT630","F2:E7:05:FA:F8:F2",device,viaBle=true))
+            val token=RemoteViewModel::class.java.getDeclaredField("generation").apply { isAccessible=true }.getInt(vm)
+            assertTrue(vm.backgroundServiceStarted(token))
+            vm.foreground(false)
+            runCurrent();advanceTimeBy(12_000);runCurrent()
+            verify(device,times(5)).connectGatt(any(),eq(false),any(),eq(BluetoothDevice.TRANSPORT_LE))
+            assertFalse(vm.connecting)
+            assertFalse(vm.retainsBackground)
+            assertNull(RemoteViewModel::class.java.getDeclaredField("btSession").apply { isAccessible=true }.get(vm))
+            while(shadowOf(app).nextStartedService!=null) { /* discard the original authorized start */ }
+            vm.foreground(true)
+            vm.setKeepBackground(false);vm.setKeepBackground(true)
+            assertNull("A completed engine must never acquire another service lease",shadowOf(app).nextStartedService)
+            assertFalse(vm.backgroundServiceStarted(token))
+        } finally {
+            vm.disconnect();vm.foreground(false)
+            Dispatchers.resetMain()
+        }
+    }
+
 }

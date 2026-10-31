@@ -286,7 +286,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                     status="连接 ${row.name} · 第 ${state.attempt}/5 次"
                 }
                 Bt630Session.State.Ready -> { connected=true;connecting=false;connectionError="";status="已连接 ${row.name} · 请手动使能" }
-                is Bt630Session.State.Failed -> { connected=false;connecting=false;connectionError=state.error;status="连接失败 · 请查看帮助";stopBackgroundService();if(!foreground)unregisterAdapterObserver() }
+                is Bt630Session.State.Failed -> { connected=false;connecting=false;connectionError=state.error;status="连接失败 · 请查看帮助";btSession=null;stopBackgroundService();if(!foreground)unregisterAdapterObserver() }
                 Bt630Session.State.Idle -> { connected=false;connecting=false;status="未连接" }
             } },
             sent={ bytes -> if(token==generation) {
