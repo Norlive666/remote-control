@@ -6,6 +6,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PanelLayoutTest {
+    @Test fun addedWidgetRowsHaveRoomForHeightAndNotes() {
+        val offsets=(0..5).map { defaultCustomPanelOffset(it,800f,400f,300f,76f) }
+        assertEquals(0f,offsets[0].x,0f);assertEquals(500f,offsets[1].x,0f)
+        assertTrue(offsets[2].y+76f<=offsets[0].y-8f)
+        assertTrue(offsets[4].y+76f<=offsets[2].y-8f)
+        assertTrue(offsets.all { it.x>=0f && it.y>=0f })
+    }
+
     @Test fun expandedScaleRangeSurvivesSaveAndCancel() {
         val session=LayoutEditSession()
         session.begin();session.resize("leftSlider",.3f);session.resize("leftPad",2.5f);session.save()

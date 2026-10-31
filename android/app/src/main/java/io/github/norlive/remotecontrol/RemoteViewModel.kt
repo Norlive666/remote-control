@@ -353,7 +353,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun cancelLayoutEdit() { layoutSession.cancel();syncLayout() }
     fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
-    fun setSettingsOpen(open: Boolean) { settingsOpen=open;if(open)suspendGamepad() }
+    fun updateSettingsOpen(open: Boolean) { settingsOpen=open;if(open)suspendGamepad() }
     fun panelPress(id: String) { if(!layoutEditing && !settingsOpen && foreground && !controls.stopped)panelControls.firstOrNull { it.id==id }?.let(buttons::press) }
     fun panelRelease(id: String) { buttons.release(id) }
     fun panelCancel(id: String) { buttons.cancel(id) }

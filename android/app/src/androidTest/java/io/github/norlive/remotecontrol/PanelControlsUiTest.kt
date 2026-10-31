@@ -21,7 +21,7 @@ class PanelControlsUiTest {
     private fun model()=ViewModelProvider(compose.activity)[RemoteViewModel::class.java]
     private fun reset() {
         model().apply {
-            setSettingsOpen(false);cancelLayoutEdit()
+            updateSettingsOpen(false);cancelLayoutEdit()
             panelControls.toList().forEach { deletePanelControl(it.id) };defaultPanelControls().forEach(::savePanelControl)
             repeat(4) { setSliderConfig(it,SliderConfig()) }
             beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit()
@@ -29,6 +29,17 @@ class PanelControlsUiTest {
     }
     @Before fun setup() { compose.runOnIdle { reset() } }
     @After fun cleanup() { compose.runOnIdle { reset() } }
+    @Test fun recreatingActivityWithSettingsOpenKeepsVisibleDialogAndCanResumeInput() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.runOnIdle { assertTrue(model().settingsOpen) }
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithTag("settings-done").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertFalse(model().settingsOpen)
+            model().slider(0,1000);assertEquals(2,model().controls.slider1)
+            model().axes(true,700,0);assertTrue(model().controls.lx>0)
+        }
+    }
     @Test fun exportActualPanelWithCustomControlNotes() {
         val controls=listOf(
             PanelControl("shot-momentary","夹爪","按住打开 · 松手归零",2,PanelControlType.MOMENTARY,77),

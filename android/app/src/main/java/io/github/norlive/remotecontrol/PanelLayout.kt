@@ -4,6 +4,12 @@ data class PanelPosition(val x: Float, val y: Float)
 
 data class PanelOffset(val x: Float, val y: Float)
 
+/** Two columns leave room for slider widgets; each row includes the one-line note. Values are dp. */
+fun defaultCustomPanelOffset(index: Int,canvasWidth: Float,canvasHeight: Float,itemWidth: Float,itemHeight: Float): PanelOffset = PanelOffset(
+    if(index%2==0)0f else (canvasWidth-itemWidth).coerceAtLeast(0f),
+    (canvasHeight-itemHeight-84f*(index/2)).coerceAtLeast(0f),
+)
+
 fun panelOffset(
     position: PanelPosition,
     canvasWidth: Float,

@@ -89,20 +89,19 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth: ()->Unit) {
     var connectionDialog by remember { mutableStateOf(false) }
-    var settingsDialog by remember { mutableStateOf(false) }
     fun action(name: String) {
         when(name) {
             "connect" -> { connectionDialog=true;if(!vm.connected && !vm.connecting)scan() }
         }
     }
     EditablePanel(vm) { name ->
-        if(name=="settings"){vm.setSettingsOpen(true);settingsDialog=true} else if(!vm.layoutEditing)action(name)
+        if(name=="settings")vm.updateSettingsOpen(true) else if(!vm.layoutEditing)action(name)
     }
     if(connectionDialog) Bt630ConnectionDialog(vm,scan,systemBluetooth) {
         if(vm.connecting)vm.disconnect() else vm.stopScan()
         connectionDialog=false
     }
-    if(settingsDialog) SettingsDialog(vm,onEdit={settingsDialog=false;vm.setSettingsOpen(false);vm.beginLayoutEdit()}) { settingsDialog=false;vm.setSettingsOpen(false) }
+    if(vm.settingsOpen) SettingsDialog(vm,onEdit={vm.updateSettingsOpen(false);vm.beginLayoutEdit()}) { vm.updateSettingsOpen(false) }
 }
 
 /** Separate gesture scope per stick; a pointer never transfers from one stick to the other. */

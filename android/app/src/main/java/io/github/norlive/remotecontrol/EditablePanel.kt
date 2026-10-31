@@ -112,8 +112,10 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                     val original=control.id=="leftSlider" || control.id=="rightSlider"
                     val itemWidth=if(control.type==PanelControlType.SLIDER)sliderWidth else minOf(150.dp,columnWidth)
                     val itemHeight=if(control.type==PanelControlType.SLIDER)sliderHeight+(if(control.note.isBlank())0.dp else 16.dp) else 64.dp
-                    val defaultX=when(control.id) { "leftSlider" -> 0.dp;"rightSlider" -> width-sliderWidth;else -> ((index%3)*(itemWidth.value+8)).dp.coerceAtMost((width-itemWidth).coerceAtLeast(0.dp)) }
-                    val defaultY=if(original)0.dp else (height-itemHeight-8.dp*(index/3)).coerceAtLeast(0.dp)
+                    val customIndex=vm.panelControls.take(index).count { it.id!="leftSlider" && it.id!="rightSlider" }
+                    val customOffset=defaultCustomPanelOffset(customIndex,width.value,height.value,itemWidth.value,itemHeight.value)
+                    val defaultX=when(control.id) { "leftSlider" -> 0.dp;"rightSlider" -> width-sliderWidth;else -> customOffset.x.dp }
+                    val defaultY=if(original)0.dp else customOffset.y.dp
                     PositionedItem(vm,control.id,defaultX,defaultY,itemWidth,itemHeight,canvasPx) {
                         if(control.type==PanelControlType.SLIDER)SliderControl(control.title,state.sliderValue(control.channel),active,vm.sliderConfigs[control.channel],control.note){vm.slider(control.channel,it)}
                         else PanelButton(vm,control,active,state.sliderValue(control.channel))
