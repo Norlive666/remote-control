@@ -629,8 +629,18 @@ class ControllerUiTest {
             assertTrue(model().controls.enabled)
             assertEquals(700,model().controls.lx)
             assertEquals(2,model().controls.slider1)
-            model().disconnect()
+            model().savePanelControl(PanelControl("retained-pulse","pulse",channel=3,type=PanelControlType.SHORT_LONG,pressValue=77))
         }
+        compose.onNodeWithTag("control-retained-pulse").performTouchInput { click() }
+        val releasedAt=android.os.SystemClock.uptimeMillis()
+        compose.runOnIdle { assertEquals(77,model().controls.slider4) }
+        compose.activityRule.scenario.recreate()
+        compose.runOnIdle {
+            // A slow device may finish recreating after the pulse's real deadline.
+            if(android.os.SystemClock.uptimeMillis()-releasedAt<400)assertEquals(77,model().controls.slider4)
+        }
+        compose.waitUntil(2000) { original.controls.slider4==0 }
+        compose.runOnIdle { model().deletePanelControl("retained-pulse");model().disconnect() }
     }
 
 }
