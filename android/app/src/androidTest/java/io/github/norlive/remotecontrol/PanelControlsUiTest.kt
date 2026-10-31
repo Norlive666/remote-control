@@ -20,7 +20,7 @@ class PanelControlsUiTest {
     private fun model()=(compose.activity.application as RemoteApplication).controller
     private fun reset() {
         model().apply {
-            setKeepBackground(false);disconnect();updateSettingsOpen(false);cancelLayoutEdit()
+            updateKeepBackground(false);disconnect();updateSettingsOpen(false);cancelLayoutEdit()
             panelControls.toList().forEach { deletePanelControl(it.id) };defaultPanelControls().forEach(::savePanelControl)
             repeat(4) { setSliderConfig(it,SliderConfig()) }
             beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit()

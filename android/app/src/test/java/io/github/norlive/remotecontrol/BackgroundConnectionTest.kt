@@ -27,7 +27,7 @@ class BackgroundConnectionTest {
         assertFalse(vm.retainsBackground)
     }
     @Test fun preferencePersistsWithoutClaimingServiceOwnership() {
-        val vm=model();vm.setKeepBackground(true)
+        val vm=model();vm.updateKeepBackground(true)
         val restored=RemoteViewModel(RuntimeEnvironment.getApplication())
         assertTrue(restored.keepBackground)
         assertFalse(restored.backgroundOwned)
@@ -36,7 +36,7 @@ class BackgroundConnectionTest {
         assertEquals(0,restored.controls.lx)
     }
     @Test fun staleServiceCallbacksCannotClaimOrDisconnectController() {
-        val vm=model();vm.foreground(true);vm.setKeepBackground(true)
+        val vm=model();vm.foreground(true);vm.updateKeepBackground(true)
         vm.axes(true,700,400)
         assertFalse(vm.backgroundServiceStarted(-1))
         vm.backgroundServiceFailed(-1,"old service")

@@ -90,9 +90,9 @@ class RemoteViewModelBluetoothStateTest {
             val adapter=app.getSystemService(BluetoothManager::class.java).adapter
             shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
             val device=mock(BluetoothDevice::class.java)
-            vm.foreground(true);vm.setKeepBackground(true)
+            vm.foreground(true);vm.updateKeepBackground(true)
             vm.connect(DeviceRow("BT630","F2:E7:05:FA:F8:F2",device,viaBle=true))
-            val token=RemoteViewModel::class.java.getDeclaredField("generation").apply { isAccessible=true }.getInt(vm)
+            val token=RemoteViewModel::class.java.getDeclaredField("serviceGeneration").apply { isAccessible=true }.get(vm) as Int
             assertTrue(vm.backgroundServiceStarted(token))
             vm.foreground(false)
             runCurrent();advanceTimeBy(12_000);runCurrent()
@@ -102,7 +102,7 @@ class RemoteViewModelBluetoothStateTest {
             assertNull(RemoteViewModel::class.java.getDeclaredField("btSession").apply { isAccessible=true }.get(vm))
             while(shadowOf(app).nextStartedService!=null) { /* discard the original authorized start */ }
             vm.foreground(true)
-            vm.setKeepBackground(false);vm.setKeepBackground(true)
+            vm.updateKeepBackground(false);vm.updateKeepBackground(true)
             assertNull("A completed engine must never acquire another service lease",shadowOf(app).nextStartedService)
             assertFalse(vm.backgroundServiceStarted(token))
         } finally {

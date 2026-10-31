@@ -26,12 +26,12 @@ class ControllerUiTest {
     private fun model()=(compose.activity.application as RemoteApplication).controller
     @After fun clearController() {
         compose.runOnIdle {
-            model().setKeepBackground(false);model().disconnect()
+            model().updateKeepBackground(false);model().disconnect()
             (compose.activity.application as RemoteApplication).viewModelStore.clear()
         }
     }
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { setKeepBackground(false);updateSettingsOpen(false);cancelLayoutEdit();beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
+        compose.runOnIdle { model().apply { updateKeepBackground(false);updateSettingsOpen(false);cancelLayoutEdit();beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -611,7 +611,7 @@ class ControllerUiTest {
                     override fun close() {}
                 } },frame={ControlProtocol.encode(original.controls,0)},pauseControls={original.suspendGamepad()},stateChanged={},sent={})
             RemoteViewModel::class.java.getDeclaredField("btSession").apply { isAccessible=true }.set(original,session)
-            original.setKeepBackground(true)
+            original.updateKeepBackground(true)
         }
         compose.waitUntil(5000) { original.retainsBackground }
         compose.runOnIdle {

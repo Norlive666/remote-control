@@ -127,8 +127,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var keepBackground by mutableStateOf(preferences.getBoolean("connection.background",false)); private set
     var backgroundOwned by mutableStateOf(false); private set
     private var serviceGeneration: Int?=null
-    val retainsBackground get()=keepBackground && backgroundOwned && serviceGeneration==generation
-    fun setKeepBackground(value: Boolean) {
+    private var serviceConnectionGeneration: Int?=null
+    private var serviceSerial=0
+    val retainsBackground get()=backgroundOwned && serviceGeneration?.let(::ownsService)==true
+    fun updateKeepBackground(value: Boolean) {
         keepBackground=value
         preferences.edit().putBoolean("connection.background",value).apply()
         if(value)startBackgroundService() else {
@@ -137,26 +139,27 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     private fun startBackgroundService() {
-        if(!keepBackground || !foreground || btSession==null || serviceGeneration==generation)return
-        val token=generation
+        if(!keepBackground || !foreground || btSession==null || serviceGeneration?.let(::ownsService)==true)return
+        val token=++serviceSerial
         serviceGeneration=token
+        serviceConnectionGeneration=generation
         try {
             getApplication<Application>().startForegroundService(Intent(getApplication(),ConnectionService::class.java).putExtra("generation",token))
         } catch(e: RuntimeException) { backgroundServiceFailed(token,e.message ?: "后台服务启动失败") }
     }
-    internal fun ownsService(token: Int)=keepBackground && serviceGeneration==token && generation==token && btSession!=null
+    internal fun ownsService(token: Int)=keepBackground && serviceGeneration==token && serviceConnectionGeneration==generation && btSession!=null
     internal fun backgroundServiceStarted(token: Int): Boolean {
         if(!ownsService(token))return false
         backgroundOwned=true
         return true
     }
     internal fun backgroundServiceFailed(token: Int,message: String) {
-        if(serviceGeneration!=token || generation!=token)return
+        if(serviceGeneration!=token || serviceConnectionGeneration!=generation)return
         disconnect();error("后台连接失败：$message")
     }
     internal fun disconnectFromService(token: Int) { if(ownsService(token))disconnect() }
     private fun stopBackgroundService() {
-        serviceGeneration=null;backgroundOwned=false
+        serviceGeneration=null;serviceConnectionGeneration=null;backgroundOwned=false
         getApplication<Application>().stopService(Intent(getApplication(),ConnectionService::class.java))
     }
     private fun unregisterAdapterObserver() {

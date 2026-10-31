@@ -23,9 +23,9 @@ class ConnectionServiceTest {
         app.getSharedPreferences("controller",0).edit().clear().commit()
         val vm=app.controller
         vm.setStickConfig(0,JoystickConfig(deadZonePercent=0))
-        vm.foreground(true);vm.setKeepBackground(true)
+        vm.foreground(true);vm.updateKeepBackground(true)
         field(vm,"btSession",mock(Bt630Session::class.java))
-        field(vm,"serviceGeneration",0)
+        field(vm,"serviceGeneration",0);field(vm,"serviceConnectionGeneration",0)
         return vm
     }
     private fun field(vm: RemoteViewModel,name: String,value: Any?) {
@@ -73,7 +73,7 @@ class ConnectionServiceTest {
         val vm=prepare()
         assertTrue(vm.backgroundServiceStarted(0))
         vm.axes(true,700,400);vm.foreground(false)
-        vm.setKeepBackground(false)
+        vm.updateKeepBackground(false)
         assertFalse(vm.backgroundOwned)
         assertEquals(0,vm.controls.lx)
         assertNull(vm.selectedDevice)
@@ -83,7 +83,7 @@ class ConnectionServiceTest {
         val old=Robolectric.buildService(ConnectionService::class.java).create()
         old.get().onStartCommand(intent(),0,1)
         vm.disconnect()
-        field(vm,"btSession",mock(Bt630Session::class.java));field(vm,"serviceGeneration",1)
+        field(vm,"btSession",mock(Bt630Session::class.java));field(vm,"serviceGeneration",1);field(vm,"serviceConnectionGeneration",1)
         assertTrue(vm.backgroundServiceStarted(1))
         vm.axes(true,700,400)
         old.destroy()
@@ -134,7 +134,7 @@ class ConnectionServiceTest {
         val service=controller.get()
         service.onStartCommand(intent(),0,1)
         vm.disconnect()
-        field(vm,"btSession",mock(Bt630Session::class.java));field(vm,"serviceGeneration",1)
+        field(vm,"btSession",mock(Bt630Session::class.java));field(vm,"serviceGeneration",1);field(vm,"serviceConnectionGeneration",1)
         service.onStartCommand(intent(1),0,2)
         assertTrue(vm.retainsBackground)
         service.onStartCommand(intent(0),0,3)
@@ -177,6 +177,27 @@ class ConnectionServiceTest {
         assertEquals(0,vm.controls.lx)
         assertNull(vm.gamepadDeviceId)
         vm.disconnect()
+    }
+
+    @Test fun rapidPreferenceOffOnUsesNewLeaseBeforeOldServiceDestruction() {
+        val vm=prepare()
+        val old=Robolectric.buildService(ConnectionService::class.java).create()
+        old.get().onStartCommand(intent(0),0,1)
+        assertTrue(vm.retainsBackground)
+        vm.updateKeepBackground(false)
+        assertFalse(vm.retainsBackground)
+        vm.updateKeepBackground(true)
+        val lease=RemoteViewModel::class.java.getDeclaredField("serviceGeneration").apply { isAccessible=true }.get(vm) as Int
+        assertNotEquals(0,lease)
+        val replacement=Robolectric.buildService(ConnectionService::class.java).create()
+        replacement.get().onStartCommand(intent(lease),0,2)
+        assertTrue(vm.retainsBackground)
+        vm.axes(true,700,400)
+        old.destroy()
+        assertTrue(vm.retainsBackground)
+        assertEquals(700,vm.controls.lx)
+        assertEquals("",vm.connectionError)
+        vm.disconnect();replacement.destroy();vm.foreground(false)
     }
 
 }

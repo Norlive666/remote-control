@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
     }
     private val notificationRequest=registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private fun backgroundConnection(value: Boolean) {
-        model.setKeepBackground(value)
+        model.updateKeepBackground(value)
         if(value && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             notificationRequest.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
