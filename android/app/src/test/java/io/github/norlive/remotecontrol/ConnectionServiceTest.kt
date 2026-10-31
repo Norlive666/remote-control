@@ -143,4 +143,17 @@ class ConnectionServiceTest {
         vm.disconnect();controller.destroy();vm.foreground(false)
     }
 
+    @Test fun releasedPulseSurvivesPassiveUiDisposalButStillExpires() {
+        val vm=prepare()
+        vm.savePanelControl(PanelControl("pulse","pulse",channel=3,type=PanelControlType.SHORT_LONG,pressValue=77))
+        assertTrue(vm.backgroundServiceStarted(0))
+        vm.panelPress("pulse");vm.panelRelease("pulse")
+        assertEquals(77,vm.controls.slider4)
+        vm.foreground(false);vm.panelDispose("pulse")
+        assertEquals(77,vm.controls.slider4)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(500))
+        assertEquals(0,vm.controls.slider4)
+        vm.disconnect()
+    }
+
 }

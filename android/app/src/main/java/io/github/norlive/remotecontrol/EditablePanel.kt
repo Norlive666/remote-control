@@ -289,9 +289,13 @@ private fun PanelButton(vm: RemoteViewModel,control: PanelControl,active: Boolea
                 if(active)try {
                     detectTapGestures(onPress={
                         vm.panelPress(control.id)
-                        if(tryAwaitRelease())vm.panelRelease(control.id) else vm.panelCancel(control.id)
+                        var completed=false
+                        try {
+                            if(tryAwaitRelease())vm.panelRelease(control.id) else vm.panelCancel(control.id)
+                            completed=true
+                        } finally { if(!completed)vm.panelCancel(control.id) }
                     })
-                } finally { vm.panelCancel(control.id) }
+                } finally { vm.panelDispose(control.id) }
             },contentAlignment=Alignment.Center) {
             Text("${control.title} · $value",fontSize=11.sp,fontWeight=FontWeight.Bold,maxLines=1)
         }
