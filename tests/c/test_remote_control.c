@@ -20,6 +20,13 @@ static void frame(uint8_t f[20], uint8_t seq, int16_t axis, uint16_t slider, uin
     f[12] = (uint8_t)slider; f[13] = (uint8_t)(slider >> 8);
     f[16] = flags; seal(f);
 }
+static void frame_v2(uint8_t f[20], uint8_t seq, const uint16_t sliders[4], uint8_t flags) {
+    uint64_t packed=0;
+    frame(f,seq,0,0,0); f[2]=2;
+    for (unsigned i=0;i<4;i++) packed|=(uint64_t)sliders[i]<<(10*i);
+    for (unsigned i=0;i<5;i++) f[12+i]=(uint8_t)(packed>>(8*i));
+    f[17]=flags; seal(f);
+}
 static void feed(const uint8_t *f, unsigned n) { for (unsigned i=0;i<n;++i) RC_ProcessByte(f[i]); }
 static void baseline(uint8_t seq) { uint8_t f[20]; frame(f,seq,0,0,0); feed(f,20); }
 static RC_State_t state(void) { RC_State_t s; RC_GetState(&s); return s; }
@@ -28,6 +35,10 @@ static void fresh_reset(void) { RC_Reset(); }
 
 int main(void) {
     uint8_t f[20], g[20]; RC_State_t s;
+    fresh_reset();
+    const uint8_t v2_fixture[20] = {0xa5,0x5a,0x2,0xff,0x18,0xfc,0xe8,0x3,0xff,0xff,0x0,0x0,0x0,0xa0,0x1f,0xc0,0xf9,0x1,0x7b,0xce};
+    feed(v2_fixture,20); s=state();
+    assert(s.enabled && s.sequence==255 && s.sliders[1]==1000 && s.sliders[2]==1 && s.sliders[3]==999);
     fresh_reset();
     /* Known CCITT-FALSE fixture: seq 1, axes +1000/-1000, slider 1000, enabled => 0x1f82. */
     const uint8_t golden[20] = {0xa5,0x5a,1,1,0xe8,3,0x18,0xfc,0,0,0,0,0xe8,3,0,0,1,0,0x82,0x1f};
@@ -42,7 +53,7 @@ int main(void) {
     s=state(); assert(s.sequence==3 && s.enabled && s.axes[0]==0 && s.sliders[0]==1000);
     /* CRC, version, reserved, flags and value ranges reject without resetting deadline. */
     frame(f,4,1,1,1); f[4]^=1; feed(f,20);
-    frame(f,4,1,1,1); f[2]=2; seal(f); feed(f,20);
+    frame(f,4,1,1,1); f[2]=3; seal(f); feed(f,20);
     frame(f,4,1,1,1); f[17]=1; seal(f); feed(f,20);
     frame(f,4,1,1,0x80); feed(f,20);
     frame(f,4,1001,1,1); feed(f,20);
@@ -97,7 +108,7 @@ int main(void) {
     s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==0 && s.sequence==40);
     frame(f,41,1000,1000,0); feed(f,20); /* Valid CRC, invalid disabled payload. */
     s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==0);
-    frame(f,41,0,0,1); f[2]=2; seal(f); feed(f,20);
+    frame(f,41,0,0,1); f[2]=3; seal(f); feed(f,20);
     frame(f,41,0,0,0x80); feed(f,20);
     s=state(); assert(s.link_valid && s.valid_frames==1 && s.crc_errors==0);
     frame(f,41,0,0,1); f[4]^=1; feed(f,20); /* Complete frame with bad CRC. */
@@ -110,6 +121,39 @@ int main(void) {
     frame(f,42,0,0,0); feed(f,20);
     s=state(); assert(s.link_valid && !s.enabled && s.valid_frames==3 && s.crc_errors==1 && s.sequence==42);
     fresh_reset(); s=state(); assert(!s.link_valid && s.valid_frames==0 && s.crc_errors==0);
+    /* Mixed versions share one sequence baseline; v1 clears extra channels. */
+    feed(v2_fixture,7); feed(v2_fixture+7,13); s=state();
+    assert(s.enabled && s.axes[2]==-1 && s.sliders[2]==1 && s.sliders[3]==999);
+    frame(f,0,1000,1000,1); feed(f,20); s=state();
+    assert(s.sequence==0 && s.sliders[0]==1000 && s.sliders[2]==0 && s.sliders[3]==0);
+    const uint16_t channels[4]={0,1,999,1000};
+    frame_v2(f,1,channels,1); feed(f,20); s=state();
+    for (unsigned i=0;i<4;i++) assert(s.sliders[i]==channels[i]);
+    frame(f,1,0,0,0); feed(f,20); assert(state().enabled); /* mixed duplicate */
+    frame_v2(f,0,channels,1); feed(f,20); assert(state().sequence==1);
+    /* Every unused 10-bit value, in every channel, must reject. */
+    ticks(299);
+    for (unsigned i=0;i<4;i++) for (unsigned value=1001;value<=1023;value++) {
+        uint16_t invalid[4]={0,0,0,0}; invalid[i]=(uint16_t)value;
+        frame_v2(f,2,invalid,1); feed(f,20);
+        assert(state().sequence==1);
+    }
+    for (unsigned flags=4;flags<=128;flags<<=1) {
+        frame_v2(f,2,channels,(uint8_t)(flags|1)); feed(f,20); assert(state().sequence==1);
+    }
+    frame_v2(f,2,channels,0); feed(f,20); assert(state().sequence==1);
+    frame_v2(f,2,channels,3); feed(f,20); assert(state().sequence==1);
+    frame_v2(f,2,channels,1); f[16]^=1; feed(f,20); assert(state().sequence==1);
+    ticks(1); s=state(); assert(!s.enabled && s.stopped && !s.link_valid);
+    for (unsigned i=0;i<4;i++) assert(s.sliders[i]==0);
+    frame_v2(f,200,channels,1); feed(f,20); s=state();
+    assert(s.enabled && s.sequence==200 && s.sliders[3]==1000);
+    fresh_reset(); s=state();
+    for (unsigned i=0;i<4;i++) assert(s.sliders[i]==0);
+    frame_v2(f,3,channels,1); feed(f,20); assert(state().enabled);
+    const uint16_t zero[4]={0,0,0,0}; frame_v2(f,4,zero,2); feed(f,20);
+    s=state(); assert(s.stopped && !s.enabled);
+    for (unsigned i=0;i<4;i++) assert(s.sliders[i]==0);
     puts("remote control behavior: pass");
     return 0;
 }

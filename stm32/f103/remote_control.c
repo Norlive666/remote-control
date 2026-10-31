@@ -16,7 +16,7 @@ static void unlock(uint32_t key) { (void)key; }
 static void neutral(void) {
     unsigned i;
     for (i=0;i<4;i++) g_rc.axes[i]=0;
-    for (i=0;i<2;i++) g_rc.sliders[i]=0;
+    for (i=0;i<4;i++) g_rc.sliders[i]=0;
     g_rc.enabled=0;
     g_rc.stopped=1;
     g_rc.link_valid=0;
@@ -31,7 +31,7 @@ void RC_GetState(RC_State_t *out) {
     uint32_t key=lock();
     unsigned i;
     for (i=0;i<4;i++) out->axes[i]=g_rc.axes[i];
-    for (i=0;i<2;i++) out->sliders[i]=g_rc.sliders[i];
+    for (i=0;i<4;i++) out->sliders[i]=g_rc.sliders[i];
     out->enabled=g_rc.enabled; out->stopped=g_rc.stopped; out->sequence=g_rc.sequence;
     out->link_valid=g_rc.link_valid; out->valid_frames=g_rc.valid_frames; out->crc_errors=g_rc.crc_errors;
     unlock(key);
@@ -56,26 +56,33 @@ static uint16_t crc16(const uint8_t *p) {
     }
     return crc;
 }
+static uint8_t flags(const uint8_t *p) { return p[p[2]==1 ? 16 : 17]; }
+static uint16_t slider(const uint8_t *p, unsigned index) {
+    if (p[2]==1) return index<2 ? le16(p+12+2*index) : 0;
+    unsigned bit=10*index, offset=12+bit/8, shift=bit%8;
+    uint16_t raw=(uint16_t)((uint16_t)p[offset] | ((uint16_t)p[offset+1]<<8));
+    return (uint16_t)((raw>>shift)&1023u);
+}
 static int valid(const uint8_t *p) {
     unsigned i;
     int inactive;
-    if (p[0]!=0xa5 || p[1]!=0x5a || p[2]!=1 || (p[16]&~3u)!=0 || p[17]!=0) return 0;
-    inactive=((p[16]&1u)==0 || (p[16]&2u)!=0);
+    if (p[0]!=0xa5 || p[1]!=0x5a || (p[2]!=1 && p[2]!=2) || (flags(p)&~3u)!=0 || (p[2]==1 && p[17]!=0)) return 0;
+    inactive=((flags(p)&1u)==0 || (flags(p)&2u)!=0);
     for (i=0;i<4;i++) { int16_t v=signed_le16(p+4+2*i); if (v < -1000 || v > 1000 || (inactive && v!=0)) return 0; }
-    for (i=0;i<2;i++) { uint16_t v=le16(p+12+2*i); if (v>1000 || (inactive && v!=0)) return 0; }
+    for (i=0;i<4;i++) { uint16_t v=slider(p,i); if (v>1000 || (inactive && v!=0)) return 0; }
     return 1;
 }
 static void publish(const uint8_t *p) {
-    uint8_t seq=p[3], flags=p[16], delta=(uint8_t)(seq-last_seq);
+    uint8_t seq=p[3], control_flags=flags(p), delta=(uint8_t)(seq-last_seq);
     unsigned i;
     uint32_t key=lock();
     if (!expired && have_seq && (delta==0 || delta>=128)) { unlock(key); return; }
     have_seq=1; last_seq=seq; expired=0; age_ms=0;
     g_rc.sequence=seq; g_rc.link_valid=1; g_rc.valid_frames++;
-    g_rc.stopped=(uint8_t)((flags&2u)!=0);
-    g_rc.enabled=(uint8_t)((flags&1u)!=0 && !g_rc.stopped);
+    g_rc.stopped=(uint8_t)((control_flags&2u)!=0);
+    g_rc.enabled=(uint8_t)((control_flags&1u)!=0 && !g_rc.stopped);
     for (i=0;i<4;i++) g_rc.axes[i]=g_rc.enabled ? signed_le16(p+4+2*i) : 0;
-    for (i=0;i<2;i++) g_rc.sliders[i]=g_rc.enabled ? le16(p+12+2*i) : 0;
+    for (i=0;i<4;i++) g_rc.sliders[i]=g_rc.enabled ? slider(p,i) : 0;
     unlock(key);
 }
 void RC_ProcessByte(uint8_t byte) {

@@ -21,7 +21,7 @@ typedef int HAL_StatusTypeDef;
 
 typedef struct {
     int16_t axes[4];
-    uint16_t sliders[2];
+    uint16_t sliders[4];
     uint8_t enabled;
     uint8_t stopped;
     uint8_t sequence;

@@ -6,22 +6,22 @@ import org.junit.Test
 class ControlProtocolTest {
     @Test fun crcMatchesStandardCheckVector() { assertEquals(0x29b1, ControlProtocol.crc("123456789".toByteArray())) }
     @Test fun enabledAxesUseSignedLittleEndianAndValidCrc() {
-        val frame = ControlProtocol.encode(ControlState(-1000, 1000, -1, 0, 0, 1000, true), 255)
-        assertArrayEquals(byteArrayOf(0xa5.toByte(),0x5a,1,0xff.toByte(),0x18,0xfc.toByte(),0xe8.toByte(),3,0xff.toByte(),0xff.toByte(),0,0,0,0,0xe8.toByte(),3,1,0),frame.copyOf(18))
+        val frame = ControlProtocol.encode(ControlState(-1000, 1000, -1, 0, 0, 1000, true, slider3=1, slider4=999), 255)
+        assertArrayEquals(byteArrayOf(0xa5.toByte(),0x5a,2,0xff.toByte(),0x18,0xfc.toByte(),0xe8.toByte(),3,0xff.toByte(),0xff.toByte(),0,0,0,0xa0.toByte(),0x1f,0xc0.toByte(),0xf9.toByte(),1),frame.copyOf(18))
         assertEquals(20,frame.size)
-        assertArrayEquals(byteArrayOf(0xdc.toByte(),0x37),frame.sliceArray(18..19))
+        assertArrayEquals(byteArrayOf(0x7b,0xce.toByte()),frame.sliceArray(18..19))
         assertEquals(ControlProtocol.crc(frame,2,18), (frame[18].toInt() and 255) or ((frame[19].toInt() and 255) shl 8))
     }
     @Test fun disabledAndStoppedFramesNeverCarryMotion() {
-        for (state in listOf(ControlState(1000, -1000, 900, 800, 1000, 1000), ControlState(1000,0,0,0,1000,1000,true,true))) {
+        for (state in listOf(ControlState(1000, -1000, 900, 800, 1000, 1000, slider3=1000, slider4=1000), ControlState(1000,0,0,0,1000,1000,true,true,1000,1000))) {
             val f=ControlProtocol.encode(state,0)
-            assertTrue(f.sliceArray(4..15).all { it==0.toByte() }); assertEquals(0,f[16].toInt() and 1)
+            assertTrue(f.sliceArray(4..16).all { it==0.toByte() }); assertEquals(0,f[17].toInt() and 1)
         }
     }
     @Test fun outOfRangeValuesAreClamped() {
-        val f=ControlProtocol.encode(ControlState(5000,-5000,0,0,-1,5000,true),0)
+        val f=ControlProtocol.encode(ControlState(5000,-5000,0,0,-1,5000,true,slider3=-1,slider4=5000),0)
         assertArrayEquals(byteArrayOf(0xe8.toByte(),3,0x18,0xfc.toByte()),f.sliceArray(4..7))
-        assertArrayEquals(byteArrayOf(0,0,0xe8.toByte(),3),f.sliceArray(12..15))
+        assertArrayEquals(byteArrayOf(0,0xa0.toByte(),0x0f,0,0xfa.toByte()),f.sliceArray(12..16))
     }
     @Test fun stopClearsControlsAndRequiresExplicitEnable() {
         val s=ControlSession(); s.enable(true);s.axes(true,900,-800);s.slider(0,900);s.stop()
@@ -32,6 +32,24 @@ class ControlProtocolTest {
     @Test fun backgroundAndConnectionChangeClearAllAxesAndDisable() {
         val s=ControlSession();s.enable(true);s.axes(false,1000,-1000);s.suspendControl()
         assertFalse(s.state.enabled);assertEquals(0,s.state.rx);assertEquals(0,s.state.ry)
+    }
+    @Test fun fourChannelSessionAndNeutralization() {
+        val s=ControlSession()
+        assertEquals(listOf(500,500,0,0),(0..3).map { s.state.sliderValue(it) })
+        for(i in 0..3)s.slider(i,100+i)
+        assertEquals(listOf(100,101,102,103),(0..3).map { s.state.sliderValue(it) })
+        s.reset();assertEquals(listOf(500,500,0,0),(0..3).map { s.state.sliderValue(it) })
+        s.slider(2,1001);s.slider(3,-1);assertEquals(1000,s.state.slider3);assertEquals(0,s.state.slider4)
+        s.suspendControl();assertTrue((0..3).all { s.state.sliderValue(it)==0 })
+        s.enable(true);s.slider(3,900);s.stop();s.slider(3,500);s.reset()
+        assertTrue((0..3).all { s.state.sliderValue(it)==0 });assertTrue(s.state.stopped)
+    }
+    @Test fun invalidChannelIsRejected() {
+        val s=ControlSession()
+        for(i in listOf(-1,4)) {
+            assertThrows(IllegalArgumentException::class.java) { s.slider(i,100) }
+            assertThrows(IllegalArgumentException::class.java) { s.state.sliderValue(i) }
+        }
     }
     @Test fun leftAndRightSticksAreIndependent() {
         val s=ControlSession();s.axes(true,200,300);s.axes(false,-400,500)
