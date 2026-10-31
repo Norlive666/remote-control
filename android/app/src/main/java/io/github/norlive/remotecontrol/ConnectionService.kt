@@ -25,7 +25,7 @@ class ConnectionService : Service() {
             return START_NOT_STICKY
         }
         if(!model.ownsService(token)) {
-            stopSelfResult(startId)
+            if(generation?.let(model::ownsService)!=true)stopSelfResult(startId)
             return START_NOT_STICKY
         }
         generation=token

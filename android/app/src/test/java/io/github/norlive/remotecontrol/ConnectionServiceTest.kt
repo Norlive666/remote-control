@@ -128,4 +128,19 @@ class ConnectionServiceTest {
         service.destroy();vm.foreground(false)
     }
 
+    @Test fun staleStartIntentCannotStopCurrentServiceLease() {
+        val vm=prepare()
+        val controller=Robolectric.buildService(ConnectionService::class.java).create()
+        val service=controller.get()
+        service.onStartCommand(intent(),0,1)
+        vm.disconnect()
+        field(vm,"btSession",mock(Bt630Session::class.java));field(vm,"serviceGeneration",1)
+        service.onStartCommand(intent(1),0,2)
+        assertTrue(vm.retainsBackground)
+        service.onStartCommand(intent(0),0,3)
+        assertTrue(vm.retainsBackground)
+        assertFalse(org.robolectric.Shadows.shadowOf(service).isStoppedBySelf)
+        vm.disconnect();controller.destroy();vm.foreground(false)
+    }
+
 }
