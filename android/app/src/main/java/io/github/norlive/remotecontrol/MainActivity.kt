@@ -122,13 +122,11 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: Joysti
                 fun update(position: Offset) {
                     currentMove(((position.x-size.width/2f)/(size.width*.34f)*1000).roundToInt(),(-(position.y-size.height/2f)/(size.height*.34f)*1000).roundToInt())
                 }
-                try {
-                    awaitEachGesture {
-                        val down=awaitFirstDown(requireUnconsumed=false);down.consume();update(down.position)
-                        try { drag(down.id) { change -> if(change.positionChanged()){change.consume();update(change.position)} } }
-                        finally { currentMove(0,0) }
-                    }
-                } finally { currentMove(0,0) }
+                awaitEachGesture {
+                    val down=awaitFirstDown(requireUnconsumed=false);down.consume();update(down.position)
+                    try { drag(down.id) { change -> if(change.positionChanged()){change.consume();update(change.position)} } }
+                    finally { currentMove(0,0) }
+                }
             }) {
             val center=Offset(size.width/2,size.height/2)
             drawLine(Color(0xffcbd5e1),Offset(0f,center.y),Offset(size.width,center.y),pathEffect=PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(),3.dp.toPx())))

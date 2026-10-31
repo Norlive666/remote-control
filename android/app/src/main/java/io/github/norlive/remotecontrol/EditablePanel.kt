@@ -281,7 +281,7 @@ private fun StickControl(vm: RemoteViewModel,title: String,index: Int,x: Int,y: 
 
 @Composable
 private fun PanelButton(vm: RemoteViewModel,control: PanelControl,active: Boolean,value: Int) {
-    DisposableEffect(control.id) { onDispose { vm.panelCancel(control.id) } }
+    DisposableEffect(control.id) { onDispose { vm.panelDispose(control.id) } }
     Column(Modifier.fillMaxSize().softCard().padding(6.dp),horizontalAlignment=Alignment.CenterHorizontally) {
         Box(Modifier.weight(1f).fillMaxWidth().background(if(active)Pad else Line,RoundedCornerShape(10.dp))
             .testTag("control-${control.id}")

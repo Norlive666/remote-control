@@ -600,4 +600,37 @@ class ControllerUiTest {
             assertEquals(SliderConfig(),model().sliderConfigs[1])
         }
     }
+    @Test fun confirmedBackgroundServiceKeepsControllerAcrossStopAndActivityRecreation() {
+        lateinit var original: RemoteViewModel
+        compose.runOnIdle {
+            original=model()
+            val session=Bt630Session(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()+kotlinx.coroutines.Dispatchers.Main),
+                linkFactory={ object: Bt630Session.Link {
+                    override suspend fun open() {}
+                    override suspend fun send(frame: ByteArray) {}
+                    override fun close() {}
+                } },frame={ControlProtocol.encode(original.controls,0)},pauseControls={original.suspendGamepad()},stateChanged={},sent={})
+            RemoteViewModel::class.java.getDeclaredField("btSession").apply { isAccessible=true }.set(original,session)
+            original.setKeepBackground(true)
+        }
+        compose.waitUntil(5000) { original.retainsBackground }
+        compose.runOnIdle {
+            val session=RemoteViewModel::class.java.getDeclaredField("session").apply { isAccessible=true }.get(original) as ControlSession
+            session.enable(true)
+            original.setStickConfig(0,JoystickConfig(deadZonePercent=0));original.axes(true,700,400);original.slider(0,2)
+        }
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        assertEquals(700,original.controls.lx)
+        assertTrue(original.controls.enabled)
+        compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        compose.activityRule.scenario.recreate()
+        compose.runOnIdle {
+            assertSame(original,model())
+            assertTrue(model().controls.enabled)
+            assertEquals(700,model().controls.lx)
+            assertEquals(2,model().controls.slider1)
+            model().disconnect()
+        }
+    }
+
 }

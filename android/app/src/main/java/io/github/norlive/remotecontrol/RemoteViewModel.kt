@@ -411,6 +411,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun panelPress(id: String) { if(!layoutEditing && !settingsOpen && foreground && !controls.stopped)panelControls.firstOrNull { it.id==id }?.let(buttons::press) }
     fun panelRelease(id: String) { buttons.release(id) }
     fun panelCancel(id: String) { buttons.cancel(id) }
+    fun panelDispose(id: String) { if(!retainsBackground)buttons.cancel(id) }
     fun savePanelControl(control: PanelControl) {
         buttons.cancelAll()
         panelControls=if(panelControls.any { it.id==control.id })panelControls.map { if(it.id==control.id)control else it } else panelControls+control
