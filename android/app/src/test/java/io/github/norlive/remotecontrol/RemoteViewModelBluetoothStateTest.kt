@@ -1,5 +1,6 @@
 package io.github.norlive.remotecontrol
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -7,7 +8,6 @@ import android.content.Intent
 import android.os.Looper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
@@ -31,37 +31,35 @@ class RemoteViewModelBluetoothStateTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val app=RuntimeEnvironment.getApplication()
+            shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+            val adapter=BluetoothAdapter.getDefaultAdapter()
+            shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
             val vm=RemoteViewModel(app)
-            val adapter=mock(BluetoothAdapter::class.java)
-            `when`(adapter.isEnabled).thenReturn(true)
-            RemoteViewModel::class.java.getDeclaredField("adapter").apply { isAccessible=true }.set(vm,adapter)
-            val row=DeviceRow("BT630","F2:E7:05:FA:F8:F2",mock(BluetoothDevice::class.java),viaBle=true)
+            val device=mock(BluetoothDevice::class.java)
+            // A null platform GATT result is a transient open failure, leaving the session in backoff.
+            val row=DeviceRow("BT630","F2:E7:05:FA:F8:F2",device,viaBle=true)
             vm.foreground(true)
-            mockConstruction(Bt630GattClient::class.java) { client,_ ->
-                runBlocking { doThrow(Bt630Failure("temporary")).`when`(client).open() }
-            }.use { construction ->
-                vm.connect(row)
-                shadowOf(Looper.getMainLooper()).idle()
-                runCurrent()
-                assertEquals(vm.status,1,construction.constructed().size)
-                assertTrue(vm.connecting)
-                vm.axes(true,400,300)
-                app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_TURNING_OFF))
-                shadowOf(Looper.getMainLooper()).idle()
-                runCurrent()
-                assertFalse(vm.connected)
-                assertFalse(vm.connecting)
-                assertNull(vm.selectedDevice)
-                assertEquals(0,vm.controls.lx)
-                assertFalse(vm.controls.enabled)
-                app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_ON))
-                shadowOf(Looper.getMainLooper()).idle()
-                advanceTimeBy(5_000)
-                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(5))
-                runCurrent()
-                assertEquals(1,construction.constructed().size)
-                assertFalse(vm.connecting)
-            }
+            vm.connect(row)
+            shadowOf(Looper.getMainLooper()).idle()
+            runCurrent()
+            verify(device,times(1)).connectGatt(any(),eq(false),any(),eq(BluetoothDevice.TRANSPORT_LE))
+            assertTrue(vm.connectionError,vm.connecting)
+            vm.axes(true,400,300)
+            app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_TURNING_OFF))
+            shadowOf(Looper.getMainLooper()).idle()
+            runCurrent()
+            assertFalse(vm.connected)
+            assertFalse(vm.connecting)
+            assertNull(vm.selectedDevice)
+            assertEquals(0,vm.controls.lx)
+            assertFalse(vm.controls.enabled)
+            app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_ON))
+            shadowOf(Looper.getMainLooper()).idle()
+            advanceTimeBy(5_000)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(5))
+            runCurrent()
+            verify(device,times(1)).connectGatt(any(),eq(false),any(),eq(BluetoothDevice.TRANSPORT_LE))
+            assertFalse(vm.connecting)
             vm.foreground(false)
         } finally { Dispatchers.resetMain() }
     }
