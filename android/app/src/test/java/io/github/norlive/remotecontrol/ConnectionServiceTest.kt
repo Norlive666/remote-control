@@ -192,6 +192,10 @@ class ConnectionServiceTest {
         val replacement=Robolectric.buildService(ConnectionService::class.java).create()
         replacement.get().onStartCommand(intent(lease),0,2)
         assertTrue(vm.retainsBackground)
+        val app=RuntimeEnvironment.getApplication<RemoteApplication>()
+        while(org.robolectric.Shadows.shadowOf(app).nextStartedService!=null) { /* discard the replacement start */ }
+        vm.foreground(true);vm.foreground(true);vm.updateKeepBackground(true)
+        assertNull("An owned lease must not start duplicate services",org.robolectric.Shadows.shadowOf(app).nextStartedService)
         vm.axes(true,700,400)
         old.destroy()
         assertTrue(vm.retainsBackground)
