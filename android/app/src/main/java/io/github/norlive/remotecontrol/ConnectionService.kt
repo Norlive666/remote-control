@@ -34,7 +34,7 @@ class ConnectionService : Service() {
             manager.createNotificationChannel(NotificationChannel("connection","后台蓝牙连接",NotificationManager.IMPORTANCE_LOW))
             val disconnect=PendingIntent.getService(this,token,Intent(this,ConnectionService::class.java)
                 .setAction("disconnect").putExtra("generation",token),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val notification=Notification.Builder(this,"connection").setSmallIcon(R.drawable.ic_remote)
                 .setContentTitle("遥控面板 · 后台保持连接").setContentText("保留使能和当前控制值；点击断开停止控制")
                 .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null,"断开",disconnect).build()).build()

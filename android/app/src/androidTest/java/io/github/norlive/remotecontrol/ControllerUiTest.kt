@@ -643,4 +643,22 @@ class ControllerUiTest {
         compose.runOnIdle { model().deletePanelControl("retained-pulse");model().disconnect() }
     }
 
+    @Test fun exportActualBackgroundConnectionSettings() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("background-connection").assertIsOff().assertIsDisplayed()
+        compose.onNodeWithText("保留使能和当前控制值；通知中可手动断开。系统仍可能停止应用。").assertIsDisplayed()
+        val image=compose.onNodeWithTag("controller-settings").captureToImage().asAndroidBitmap()
+        val file=File(compose.activity.getExternalFilesDir(null),"background-settings.png")
+        FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        assertTrue(file.length()>0)
+        val automation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        val exported=automation.executeShellCommand("cp /sdcard/Android/data/io.github.norlive.remotecontrol/files/background-settings.png /sdcard/Download/background-settings.png")
+        val output=android.os.ParcelFileDescriptor.AutoCloseInputStream(exported).bufferedReader().use { it.readText() }
+        assertTrue(output,output.isBlank())
+        val size=automation.executeShellCommand("stat -c %s /sdcard/Download/background-settings.png")
+        val bytes=android.os.ParcelFileDescriptor.AutoCloseInputStream(size).bufferedReader().use { it.readText().trim() }
+        assertEquals(file.length().toString(),bytes)
+        compose.onNodeWithTag("settings-done").performClick()
+    }
+
 }

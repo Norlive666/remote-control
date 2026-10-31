@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
 @Config(sdk=[33],application=RemoteApplication::class,manifest=Config.NONE)
 class ConnectionServiceTest {
     private fun prepare(): RemoteViewModel {
-        val app=RuntimeEnvironment.getApplication<RemoteApplication>()
+        val app=(RuntimeEnvironment.getApplication() as RemoteApplication)
         app.getSharedPreferences("controller",0).edit().clear().commit()
         val vm=app.controller
         vm.setStickConfig(0,JoystickConfig(deadZonePercent=0))
@@ -116,7 +116,7 @@ class ConnectionServiceTest {
         assertEquals(1,retained[17].toInt() and 1)
         assertEquals(700,(retained[4].toInt() and 255) or ((retained[5].toInt() and 255) shl 8))
         assertEquals(2,vm.controls.slider1)
-        assertSame(vm,RuntimeEnvironment.getApplication<RemoteApplication>().controller)
+        assertSame(vm,(RuntimeEnvironment.getApplication() as RemoteApplication).controller)
         vm.foreground(true)
         assertTrue(vm.controls.enabled)
         advanceTimeBy(40);runCurrent()
@@ -192,7 +192,7 @@ class ConnectionServiceTest {
         val replacement=Robolectric.buildService(ConnectionService::class.java).create()
         replacement.get().onStartCommand(intent(lease),0,2)
         assertTrue(vm.retainsBackground)
-        val app=RuntimeEnvironment.getApplication<RemoteApplication>()
+        val app=(RuntimeEnvironment.getApplication() as RemoteApplication)
         while(org.robolectric.Shadows.shadowOf(app).nextStartedService!=null) { /* discard the replacement start */ }
         vm.foreground(true);vm.foreground(true);vm.updateKeepBackground(true)
         assertNull("An owned lease must not start duplicate services",org.robolectric.Shadows.shadowOf(app).nextStartedService)
@@ -202,6 +202,18 @@ class ConnectionServiceTest {
         assertEquals(700,vm.controls.lx)
         assertEquals("",vm.connectionError)
         vm.disconnect();replacement.destroy();vm.foreground(false)
+    }
+
+    @Test fun notificationOpenReusesExistingActivityInsteadOfStackingControllers() {
+        val vm=prepare()
+        val controller=Robolectric.buildService(ConnectionService::class.java).create()
+        controller.get().onStartCommand(intent(),0,1)
+        val notification=org.robolectric.Shadows.shadowOf(controller.get()).lastForegroundNotification
+        val open=org.robolectric.Shadows.shadowOf(notification.contentIntent).savedIntent
+        assertEquals(MainActivity::class.java.name,open.component!!.className)
+        assertEquals(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            open.flags and (Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        vm.disconnect();controller.destroy();vm.foreground(false)
     }
 
 }

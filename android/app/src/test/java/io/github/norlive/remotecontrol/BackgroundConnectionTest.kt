@@ -10,10 +10,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk=[33],manifest=Config.NONE)
+@Config(sdk=[33],application=RemoteApplication::class,manifest=Config.NONE)
 class BackgroundConnectionTest {
     private fun model(): RemoteViewModel {
-        val app=RuntimeEnvironment.getApplication<Application>()
+        val app=RuntimeEnvironment.getApplication()
         app.getSharedPreferences("controller",0).edit().clear().commit()
         return RemoteViewModel(app).apply { setStickConfig(0,JoystickConfig(deadZonePercent=0)) }
     }
@@ -46,7 +46,7 @@ class BackgroundConnectionTest {
         vm.foreground(false)
     }
     @Test fun applicationStoreSharesControllerBeyondActivityOwners() {
-        val app=org.robolectric.Robolectric.buildApplication(RemoteApplication::class.java).create().get()
+        val app=(RuntimeEnvironment.getApplication() as RemoteApplication)
         val first=app.controller
         first.setStickConfig(0,JoystickConfig(deadZonePercent=0))
         assertSame(first,ViewModelProvider(app,ViewModelProvider.AndroidViewModelFactory.getInstance(app))[RemoteViewModel::class.java])

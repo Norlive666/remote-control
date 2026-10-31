@@ -82,7 +82,7 @@ class RemoteViewModelBluetoothStateTest {
     }
     @Test fun fifthFailureCannotRestartBackgroundServiceOnReturnOrPreferenceToggle() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val app=RuntimeEnvironment.getApplication<android.app.Application>()
+        val app=RuntimeEnvironment.getApplication()
         app.getSharedPreferences("controller",0).edit().clear().commit()
         val vm=RemoteViewModel(app)
         try {

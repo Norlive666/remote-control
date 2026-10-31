@@ -142,7 +142,7 @@ internal fun Joystick(label: String,x: Int,y: Int,active: Boolean,config: Joysti
 @Composable
 private fun SettingsDialog(vm: RemoteViewModel,backgroundConnection: (Boolean)->Unit,onEdit: ()->Unit,onClose: ()->Unit) {
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Surface(shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth(.8f).heightIn(max=340.dp)) {
+        Surface(shape=RoundedCornerShape(20.dp),modifier=Modifier.testTag("controller-settings").fillMaxWidth(.8f).heightIn(max=340.dp)) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose,modifier=Modifier.testTag("settings-done")){Text("完成")} }
                 OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
