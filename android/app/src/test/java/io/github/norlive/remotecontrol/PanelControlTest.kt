@@ -29,6 +29,22 @@ class PanelControlTest {
         buttons.press(control);clock.advance(500);assertEquals(9,values[3])
         buttons.release(control.id);assertEquals(0,values[3]);clock.advance(1000);assertEquals(0,values[3])
     }
+    @Test fun cancelledCycleDoesNotTakeOwnershipOfAnExistingPulse() {
+        val clock=Clock();val values=IntArray(4)
+        val buttons=PanelButtonController(clock::schedule,{clock.now},{values[it]}) { channel,value -> values[channel]=value }
+        val pulse=PanelControl("pulse","pulse",type=PanelControlType.SHORT_LONG,pressValue=5)
+        val cycle=PanelControl("cycle","cycle",type=PanelControlType.CYCLE)
+        buttons.press(pulse);buttons.release(pulse.id);assertEquals(5,values[0])
+        buttons.press(cycle);buttons.cancel(cycle.id);clock.advance(100)
+        assertEquals(0,values[0])
+    }
+    @Test fun waitingLongPressCancellationDoesNotEraseExistingHeldValue() {
+        val clock=Clock();val values=IntArray(4)
+        val buttons=PanelButtonController(clock::schedule,{clock.now},{values[it]}) { channel,value -> values[channel]=value }
+        buttons.assign(0,777)
+        val button=PanelControl("a","a",type=PanelControlType.SHORT_LONG)
+        buttons.press(button);buttons.cancel(button.id);assertEquals(777,values[0])
+    }
     @Test fun cycleUsesCurrentChannelIncludingOtherInputWrites() {
         val clock=Clock();val values=IntArray(4)
         val buttons=PanelButtonController(clock::schedule,{clock.now},{values[it]}) { channel,value -> values[channel]=value }
@@ -41,7 +57,16 @@ class PanelControlTest {
         val buttons=PanelButtonController(clock::schedule,{clock.now}) { _,value -> emitted.add(value) }
         val control=PanelControl("a","a",type=PanelControlType.SHORT_LONG,pressValue=5,longValue=9)
         buttons.press(control);clock.now=500;buttons.release(control.id);clock.advance(1000)
-        assertEquals(listOf(0),emitted)
+        assertEquals(listOf(9,0),emitted)
+    }
+    @Test fun pendingButtonActivationCannotOverwriteNewerInput() {
+        for(type in listOf(PanelControlType.SHORT_LONG,PanelControlType.CYCLE)) {
+            val clock=Clock();val values=IntArray(4)
+            val buttons=PanelButtonController(clock::schedule,{clock.now},{values[it]}) { channel,value -> values[channel]=value }
+            val button=PanelControl("a","a",type=type)
+            buttons.press(button);buttons.assign(0,777);clock.advance(500);buttons.release(button.id)
+            assertEquals(777,values[0]);clock.advance(1000);assertEquals(777,values[0])
+        }
     }
     @Test fun newerWriteOwnsChannelAndCancelClearsAllChannels() {
         val clock=Clock();val values=IntArray(4)
