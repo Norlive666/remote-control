@@ -49,7 +49,7 @@ class BackgroundConnectionTest {
         val app=(RuntimeEnvironment.getApplication() as RemoteApplication)
         val first=app.controller
         first.setStickConfig(0,JoystickConfig(deadZonePercent=0))
-        assertSame(first,ViewModelProvider(app,ViewModelProvider.AndroidViewModelFactory.getInstance(app))[RemoteViewModel::class.java])
+        assertSame(first,ViewModelProvider(app,ViewModelProvider.AndroidViewModelFactory(app))[RemoteViewModel::class.java])
         first.axes(true,700,400)
         assertEquals(700,app.controller.controls.lx)
         app.viewModelStore.clear()
@@ -57,4 +57,16 @@ class BackgroundConnectionTest {
         assertFalse(app.controller.controls.enabled)
         app.viewModelStore.clear()
     }
+    @Test fun separateApplicationOwnerNeverUsesCachedFactoryApplication() {
+        val app=RuntimeEnvironment.getApplication() as RemoteApplication
+        ViewModelProvider.AndroidViewModelFactory.getInstance(app)
+        val other=RemoteApplication()
+        android.content.ContextWrapper::class.java.getDeclaredMethod("attachBaseContext",android.content.Context::class.java)
+            .apply { isAccessible=true }.invoke(other,app)
+        try {
+            assertSame(other,other.controller.getApplication<Application>())
+            assertNotSame(app.controller,other.controller)
+        } finally { other.viewModelStore.clear();app.viewModelStore.clear() }
+    }
+
 }

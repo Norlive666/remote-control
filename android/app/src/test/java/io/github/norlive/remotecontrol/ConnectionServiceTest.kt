@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.*
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
@@ -20,8 +21,10 @@ import org.robolectric.annotation.Config
 class ConnectionServiceTest {
     private fun prepare(): RemoteViewModel {
         val app=(RuntimeEnvironment.getApplication() as RemoteApplication)
+        app.viewModelStore.clear()
         app.getSharedPreferences("controller",0).edit().clear().commit()
         val vm=app.controller
+        assertSame("Controller must use its owning Application",app,vm.getApplication<android.app.Application>())
         vm.setStickConfig(0,JoystickConfig(deadZonePercent=0))
         vm.foreground(true);vm.updateKeepBackground(true)
         field(vm,"btSession",mock(Bt630Session::class.java))
@@ -225,6 +228,21 @@ class ConnectionServiceTest {
         assertEquals(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP,
             open.flags and (Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         vm.disconnect();controller.destroy();vm.foreground(false)
+    }
+
+    @After fun releaseController() {
+        val app=RuntimeEnvironment.getApplication() as RemoteApplication
+        app.viewModelStore.clear()
+        app.getSharedPreferences("controller",0).edit().clear().commit()
+    }
+    @Test fun fixtureDoesNotReuseChangedSliderConfigurationOrController() {
+        val old=prepare()
+        old.setSliderConfig(0,SliderConfig(stepped=false));old.slider(0,123)
+        val fresh=prepare()
+        assertNotSame(old,fresh)
+        assertTrue(fresh.sliderConfigs[0].stepped)
+        fresh.slider(0,1000)
+        assertEquals(2,fresh.controls.slider1)
     }
 
 }
