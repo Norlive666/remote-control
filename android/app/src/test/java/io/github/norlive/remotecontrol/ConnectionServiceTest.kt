@@ -156,4 +156,27 @@ class ConnectionServiceTest {
         vm.disconnect()
     }
 
+    @Test fun recreatedGamepadOwnerKeepsPhysicalIdentityForBackgroundRemoval() {
+        val vm=prepare()
+        assertTrue(vm.backgroundServiceStarted(0))
+        vm.gamepadDevice("physical",7);vm.axes(true,700,400)
+        val input=GamepadInput(RuntimeEnvironment.getApplication(),vm)
+        val manager=mock(android.hardware.input.InputManager::class.java)
+        val device=mock(android.view.InputDevice::class.java)
+        org.mockito.Mockito.`when`(manager.inputDeviceIds).thenReturn(intArrayOf(7))
+        org.mockito.Mockito.`when`(manager.getInputDevice(7)).thenReturn(device)
+        org.mockito.Mockito.`when`(device.id).thenReturn(7)
+        org.mockito.Mockito.`when`(device.name).thenReturn("physical")
+        org.mockito.Mockito.`when`(device.supportsSource(android.view.InputDevice.SOURCE_GAMEPAD)).thenReturn(true)
+        GamepadInput::class.java.getDeclaredField("manager").apply { isAccessible=true }.set(input,manager)
+        input.start()
+        assertEquals(7,vm.gamepadDeviceId)
+        input.stop();vm.foreground(false)
+        val observer=RemoteViewModel::class.java.getDeclaredField("inputObserver").apply { isAccessible=true }.get(vm) as android.hardware.input.InputManager.InputDeviceListener
+        observer.onInputDeviceRemoved(7)
+        assertEquals(0,vm.controls.lx)
+        assertNull(vm.gamepadDeviceId)
+        vm.disconnect()
+    }
+
 }

@@ -113,7 +113,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private var systemScanNote="未启动"
     private var generation=0
     private var foreground=false
-    private var gamepadDeviceId: Int?=null
+    internal var gamepadDeviceId: Int?=null; private set
     private val inputManager=application.getSystemService(android.hardware.input.InputManager::class.java)
     private var inputObserverRegistered=false
     private val inputObserver=object: android.hardware.input.InputManager.InputDeviceListener {

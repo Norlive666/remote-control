@@ -10,7 +10,7 @@ import kotlin.math.roundToInt
 internal class GamepadInput(context: Context,private val vm: RemoteViewModel) : InputManager.InputDeviceListener {
     private val manager=context.applicationContext.getSystemService(InputManager::class.java)
     private val buttons=GamepadButtons()
-    private var deviceId: Int?=null
+    private var deviceId: Int?=vm.gamepadDeviceId
     private var running=false
     private var focused=true
     fun start() { running=true;manager.registerInputDeviceListener(this,null);refresh() }
