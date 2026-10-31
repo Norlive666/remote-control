@@ -3,6 +3,7 @@ package io.github.norlive.remotecontrol
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.os.Looper
@@ -32,7 +33,7 @@ class RemoteViewModelBluetoothStateTest {
         try {
             val app=RuntimeEnvironment.getApplication()
             shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-            val adapter=BluetoothAdapter.getDefaultAdapter()
+            val adapter=app.getSystemService(BluetoothManager::class.java).adapter
             shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
             val vm=RemoteViewModel(app)
             val device=mock(BluetoothDevice::class.java)
@@ -43,8 +44,10 @@ class RemoteViewModelBluetoothStateTest {
             shadowOf(Looper.getMainLooper()).idle()
             runCurrent()
             verify(device,times(1)).connectGatt(any(),eq(false),any(),eq(BluetoothDevice.TRANSPORT_LE))
+            assertEquals("GATT connection could not start",vm.connectionError)
             assertTrue(vm.connectionError,vm.connecting)
             vm.axes(true,400,300)
+            shadowOf(adapter).setState(BluetoothAdapter.STATE_TURNING_OFF)
             app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_TURNING_OFF))
             shadowOf(Looper.getMainLooper()).idle()
             runCurrent()
@@ -53,6 +56,7 @@ class RemoteViewModelBluetoothStateTest {
             assertNull(vm.selectedDevice)
             assertEquals(0,vm.controls.lx)
             assertFalse(vm.controls.enabled)
+            shadowOf(adapter).setState(BluetoothAdapter.STATE_ON)
             app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_ON))
             shadowOf(Looper.getMainLooper()).idle()
             advanceTimeBy(5_000)
