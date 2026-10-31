@@ -1,0 +1,12 @@
+# Custom controls and four-channel sliders
+
+User requests retaining two default sliders, adding configurable button count/function/notes, short/long press values, click-to-cycle controls and four slider channels. Momentary controls release to zero. Confirmed: short release pulses100ms; long500ms triggers long value untilrelease0; mutually exclusive. Cycle keeps selected value. Approved spec: docs/superpowers/specs/2026-10-31-custom-controls-design.md. App1.7.0/code13; driverstm32-v3.0.0.
+
+## Frozen protocol task
+
+Keep 20-byte frames and A5 5A header; byte2 version2, byte3 sequence. Axes remain four signed little-endian int16 fields at4..11. Four unsigned slider values0..1000 occupy five bytes12..16, packed least-significant-bit first with10 bits each. Flags enabled bit0/stopped bit1 move to17; all other flag bits reject. CRC16 CCITT-FALSE remains over2..17 in18..19 little-endian. No reserved byte in v2. Driver accepts v1 unchanged, fills slider3/4 with0 for v1, and continues v2.3.0 enabled recovery/300ms timeout behavior.
+
+- [ ] Protocol implementer owns ControlProtocol.kt, ControlProtocolTest.kt, both stm32 driver pairs, tests/c/test_remote_control.c, protocol/README.md. Add slider3/4 at END of ControlState constructor to preserve positional calls; add sliderValue(index) accessor and ControlSession four-channel assignment/clear. Default new fields0. Encode v2 by default. First prove tests RED on old code, then GREEN. Use independent literal CRC fixtures, test all channels/ranges/neutralization, legacy compatibility and mixed frames.
+- [ ] Root finalizes component trigger semantics from user response and writes UI/task interfaces before delegating UI integration. Components have stable IDs, title, note, target0..3, type and appropriate values; existing saved layout/slider/gamepad settings migrate without losing positions. Default panel has only its original two sliders. Added components can be edited/deleted/moved/resized and saved.
+- [ ] Integrate settings, momentary/long/cycle controls with coherent same-channel touch ownership and cancellation; dismiss/background/layout edit disables and clears pending presses. Extend hand-controller targets to four channels while retaining existing default mappings.
+- [ ] Review/test protocol and UI separately, run full Android/STM32 checks, inspect actual screenshots. Update migration docs; build and sign APK locally with original key, publish APK and matching drivers only after validation. Do not touch Vela_Gimbal.
