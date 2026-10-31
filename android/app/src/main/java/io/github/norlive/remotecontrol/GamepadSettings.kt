@@ -41,7 +41,7 @@ internal fun GamepadSettings(vm: RemoteViewModel) {
                     val valid=parsed!=null && parsed in 0..1000 && (!config.stepped || parsed in config.values)
                     Text(button.title,fontWeight=FontWeight.Bold)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        GamepadChoice("滑块 ${target+1}","gamepad-target-${button.name}",listOf("滑块 1","滑块 2")) { index ->
+                        GamepadChoice("滑块 ${target+1}","gamepad-target-${button.name}",List(4) { "滑块 ${it+1}" }) { index ->
                             target=index
                             if(vm.sliderConfigs[index].stepped && text.toIntOrNull() !in vm.sliderConfigs[index].values)text=vm.sliderConfigs[index].values.first().toString()
                         }

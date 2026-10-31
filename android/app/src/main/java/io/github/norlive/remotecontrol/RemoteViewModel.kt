@@ -22,6 +22,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlin.math.roundToInt
+import org.json.JSONArray
+import org.json.JSONObject
 
 const val BT630_PERIOD_MS=20L
 data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice,val viaBle: Boolean=false,val viaSystem: Boolean=false) {
@@ -41,13 +43,19 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val adapter=(application.getSystemService(BluetoothManager::class.java))?.adapter
     private val main=Handler(Looper.getMainLooper())
     private val session=ControlSession()
-    private val layoutSession=LayoutEditSession(layoutIds.mapNotNull { id ->
+    var panelControls by mutableStateOf(loadPanelControls()); private set
+    val allLayoutIds get()=layoutIds.filterNot { it=="leftSlider" || it=="rightSlider" }+panelControls.map { it.id }
+    var settingsOpen by mutableStateOf(false); private set
+    private val buttons=PanelButtonController({ delay,block ->
+        val task=Runnable { block() };main.postDelayed(task,delay);{ main.removeCallbacks(task) }
+    },current={session.state.sliderValue(it)}) { channel,value -> session.slider(channel,value);sync() }
+    private val layoutSession=LayoutEditSession(allLayoutIds.mapNotNull { id ->
         if(!preferences.contains("layout.$id.x") || !preferences.contains("layout.$id.y"))null
         else {
             val x=preferences.getFloat("layout.$id.x",0f);val y=preferences.getFloat("layout.$id.y",0f)
             if(x.isFinite() && y.isFinite())id to PanelPosition(x.coerceIn(0f,1f),y.coerceIn(0f,1f)) else null
         }
-    }.toMap(),layoutIds.mapNotNull { id ->
+    }.toMap(),allLayoutIds.mapNotNull { id ->
         val scale=preferences.getFloat("layout.$id.scale",1f)
         if(preferences.contains("layout.$id.scale") && scale.isFinite())id to scale.coerceIn(.3f,2.5f) else null
     }.toMap())
@@ -77,13 +85,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                 else JoystickMode.entries.firstOrNull { it.name==saved } ?: JoystickMode.FREE
             })
     }); private set
-    var sliderConfigs by mutableStateOf(List(2) { index ->
+    var sliderConfigs by mutableStateOf(List(4) { index ->
         val parsed=(preferences.getString("slider.$index.values","0,1,2") ?: "0,1,2").split(',').map { it.toIntOrNull() }
         val values=if(parsed.size in 2..8 && parsed.distinct().size==parsed.size && parsed.all { it!=null && it in 0..1000 })parsed.map { it!! } else listOf(0,1,2)
         SliderConfig(preferences.getBoolean("slider.$index.stepped",true),values)
     }); private set
     var gamepadBindings by mutableStateOf(defaultGamepadBindings(sliderConfigs).mapValues { (button,fallback) ->
-        val slider=preferences.getInt("gamepad.${button.name}.slider",fallback.slider).coerceIn(0,1)
+        val slider=preferences.getInt("gamepad.${button.name}.slider",fallback.slider).coerceIn(0,3)
         val value=preferences.getInt("gamepad.${button.name}.value",fallback.value).coerceIn(0,1000)
         GamepadBinding(slider,value).reconcile(sliderConfigs)
     }); private set
@@ -221,7 +229,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                 main.post { if(token==generation && foreground)lastReceived=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) } }
             } },
             frame={ ControlProtocol.encode(session.state,sequence++) },
-            pauseControls={ session.suspendControl();sync() },
+            pauseControls={ buttons.cancelAll();session.suspendControl();sync() },
             stateChanged={ state -> if(token==generation)when(state) {
                 is Bt630Session.State.Connecting -> {
                     connected=false;connecting=true;connectionError=state.error ?: ""
@@ -238,7 +246,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         current.start()
     }
     fun disconnect() {
-        generation++;stopScan();btSession?.stop();btSession=null
+        buttons.cancelAll();generation++;stopScan();btSession?.stop();btSession=null
         selectedDevice=null;connectionError="";connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }
     fun foreground(value: Boolean) {
@@ -266,7 +274,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun axes(left: Boolean,x: Int,y: Int) {
-        if(layoutEditing)return
+        if(layoutEditing || settingsOpen)return
         val (mappedX,mappedY)=stickConfigs[if(left)0 else 1].map(x,y)
         session.axes(left,mappedX,mappedY);sync()
     }
@@ -281,22 +289,22 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         val current=stickConfigs[index]
         setStickConfig(index,current.copy(mode=JoystickMode.entries[(current.mode.ordinal+1)%JoystickMode.entries.size]))
     }
-    fun slider(index: Int,value: Int) { if(layoutEditing)return;session.slider(index,sliderConfigs[index].map(value));sync() }
+    fun slider(index: Int,value: Int) { if(layoutEditing || settingsOpen)return;buttons.assign(index,sliderConfigs[index].map(value));sync() }
     fun setSliderConfig(index: Int,config: SliderConfig) {
         if(layoutEditing)return
         sliderConfigs=sliderConfigs.mapIndexed { i,current -> if(i==index)config else current }
         preferences.edit().putBoolean("slider.$index.stepped",config.stepped)
             .putString("slider.$index.values",config.values.joinToString(",")).apply()
-        session.slider(index,config.map(0))
+        buttons.assign(index,config.map(0))
         gamepadBindings=gamepadBindings.mapValues { (_,binding) -> binding.reconcile(sliderConfigs) }
         saveGamepadBindings();sync()
     }
     fun gamepadEvent(description: String) { gamepadInputInfo=description }
     fun gamepadDevice(name: String?) { gamepadName=name }
     fun gamepadPress(button: GamepadButton) {
-        if(!foreground || layoutEditing)return
+        if(!foreground || layoutEditing || settingsOpen)return
         val binding=gamepadBindings.getValue(button)
-        session.slider(binding.slider,binding.value)
+        buttons.assign(binding.slider,binding.value)
         lastGamepadInput="${button.title} → 滑块 ${binding.slider+1} = ${binding.value}"
         sync()
     }
@@ -309,27 +317,29 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         gamepadBindings.forEach { (button,binding) -> editor.putInt("gamepad.${button.name}.slider",binding.slider).putInt("gamepad.${button.name}.value",binding.value) }
         editor.apply()
     }
-    fun suspendGamepad() { session.suspendControl();sync() }
+    fun suspendGamepad() { buttons.cancelAll();session.suspendControl();sync() }
     fun enable(value: Boolean) {
-        if(value && (!connected || !foreground || layoutEditing))return
+        if(value && (!connected || !foreground || layoutEditing || settingsOpen))return
+        if(!value)buttons.cancelAll()
         session.enable(value)
         if(value)sliderConfigs.forEachIndexed { i,config ->
-            val current=if(i==0)session.state.slider1 else session.state.slider2
-            session.slider(i,config.map(config.position(current).roundToInt()))
+            val current=session.state.sliderValue(i)
+            if(panelControls.none { it.channel==i && it.type!=PanelControlType.SLIDER })
+                session.slider(i,config.map(config.position(current).roundToInt()))
         }
         sync()
     }
     fun beginLayoutEdit() {
         if(layoutEditing || !padCanvas)return
-        session.enable(false);sync();layoutSession.begin();syncLayout()
+        buttons.cancelAll();session.enable(false);sync();layoutSession.begin();syncLayout()
     }
-    fun selectPanel(id: String) { if(layoutEditing && id in layoutIds)selectedLayoutId=id }
+    fun selectPanel(id: String) { if(layoutEditing && id in allLayoutIds)selectedLayoutId=id }
     fun resizePanel(scale: Float) { layoutSession.resize(selectedLayoutId,scale);syncLayout() }
     fun movePanel(id: String,position: PanelPosition) { selectPanel(id);layoutSession.move(id,position);syncLayout() }
     fun saveLayoutEdit() {
         layoutSession.save()
         val editor=preferences.edit().putBoolean("layout.padCanvas",padCanvas)
-        layoutIds.forEach { id -> editor.remove("layout.$id.x").remove("layout.$id.y").remove("layout.$id.scale") }
+        allLayoutIds.forEach { id -> editor.remove("layout.$id.x").remove("layout.$id.y").remove("layout.$id.scale") }
         layoutSession.saved.forEach { (id,p) -> editor.putFloat("layout.$id.x",p.x).putFloat("layout.$id.y",p.y) }
         layoutSession.savedScales.forEach { (id,scale) -> editor.putFloat("layout.$id.scale",scale) }
         editor.apply();syncLayout()
@@ -343,6 +353,35 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun cancelLayoutEdit() { layoutSession.cancel();syncLayout() }
     fun defaultLayoutDraft() { layoutSession.restoreDefaults();syncLayout() }
+    fun setSettingsOpen(open: Boolean) { settingsOpen=open;if(open)suspendGamepad() }
+    fun panelPress(id: String) { if(!layoutEditing && !settingsOpen && foreground && !controls.stopped)panelControls.firstOrNull { it.id==id }?.let(buttons::press) }
+    fun panelRelease(id: String) { buttons.release(id) }
+    fun panelCancel(id: String) { buttons.cancel(id) }
+    fun savePanelControl(control: PanelControl) {
+        buttons.cancelAll()
+        panelControls=if(panelControls.any { it.id==control.id })panelControls.map { if(it.id==control.id)control else it } else panelControls+control
+        savePanelControls()
+    }
+    fun deletePanelControl(id: String) {
+        buttons.cancelAll();panelControls=panelControls.filterNot { it.id==id };savePanelControls()
+    }
+    private fun savePanelControls() {
+        val array=JSONArray()
+        panelControls.forEach { c -> array.put(JSONObject().put("id",c.id).put("title",c.title).put("note",c.note).put("channel",c.channel)
+            .put("type",c.type.name).put("pressValue",c.pressValue).put("longValue",c.longValue).put("cycleValues",JSONArray(c.cycleValues))) }
+        preferences.edit().putString("panel.controls",array.toString()).apply()
+    }
+    private fun loadPanelControls(): List<PanelControl> = runCatching {
+        val saved=preferences.getString("panel.controls",null) ?: return defaultPanelControls()
+        val array=JSONArray(saved)
+        val controls=(0 until array.length()).map { i ->
+            val c=array.getJSONObject(i);val values=c.getJSONArray("cycleValues")
+            PanelControl(c.getString("id"),c.getString("title"),c.optString("note",""),c.getInt("channel"),PanelControlType.valueOf(c.getString("type")),
+                c.getInt("pressValue"),c.getInt("longValue"),(0 until values.length()).map(values::getInt))
+        }
+        require(controls.map { it.id }.distinct().size==controls.size)
+        controls
+    }.getOrElse { defaultPanelControls() }
     private fun syncLayout() { layoutEditing=layoutSession.editing;layoutPositions=layoutSession.positions;layoutScales=layoutSession.scales }
     private fun sync() { controls=session.state }
     override fun onCleared() { foreground(false);super.onCleared() }

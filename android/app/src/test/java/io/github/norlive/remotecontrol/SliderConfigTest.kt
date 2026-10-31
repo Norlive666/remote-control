@@ -26,7 +26,7 @@ class SliderConfigTest {
         val c=SliderConfig(values=listOf(0,10,100))
         val s=ControlSession();s.enable(true);s.slider(0,c.map(500))
         val f=ControlProtocol.encode(s.state,0)
-        assertEquals(10,f[12].toInt());assertEquals(0,f[13].toInt())
+        assertEquals(10,(f[12].toInt() and 255) or ((f[13].toInt() and 3) shl 8))
     }
     @Test fun firstValueCanBeNonZeroAndValidationRejectsInvalidLists() {
         assertEquals(10,SliderConfig(values=listOf(10,20)).map(0))

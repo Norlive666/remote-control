@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -69,7 +70,7 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 val hubHeight=minOf(if(compact)112.dp else 128.dp,(mainHeight-92.dp).coerceAtLeast(1.dp))
                 val hubY=mainY+44.dp+(mainHeight-44.dp-hubHeight-52.dp).coerceAtLeast(0.dp)/2
                 val state=vm.controls
-                val active=!state.stopped && !vm.layoutEditing
+                val active=!state.stopped && !vm.layoutEditing && !vm.settingsOpen
                 val density=LocalDensity.current
                 val canvasPx=with(density){Offset(width.toPx(),height.toPx())}
                 val targetPadBases=listOf("leftStick" to "leftPad","rightStick" to "rightPad").associate { (cardId,padId) ->
@@ -78,12 +79,6 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                     padId to with(density){(minOf((columnWidth-20.dp).coerceAtLeast(1.dp),(mainHeight-76.dp).coerceAtLeast(1.dp),260.dp)*.75f*cardScale).toPx()}
                 }
                 LaunchedEffect(targetPadBases) { legacyPadBases=targetPadBases }
-                PositionedItem(vm,"leftSlider",0.dp,0.dp,sliderWidth,sliderHeight,canvasPx) {
-                    SliderControl("滑块 1",state.slider1,active,vm.sliderConfigs[0]){vm.slider(0,it)}
-                }
-                PositionedItem(vm,"rightSlider",width-sliderWidth,0.dp,sliderWidth,sliderHeight,canvasPx) {
-                    SliderControl("滑块 2",state.slider2,active,vm.sliderConfigs[1]){vm.slider(1,it)}
-                }
                 PositionedItem(vm,"leftStick",0.dp,mainY,columnWidth,stickHeight,canvasPx) {
                     StickControl(vm,"左摇杆",0,state.lx,state.ly,active,vm.stickConfigs[0],{vm.cycleStickMode(0)},!vm.padCanvas,{legacyPads=legacyPads+("leftPad" to it)}){x,y->vm.axes(true,x,y)}
                 }
@@ -113,6 +108,17 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                         Joystick(if(index==0)"左摇杆" else "右摇杆",if(index==0)state.lx else state.rx,if(index==0)state.ly else state.ry,active,config) { x,y -> vm.axes(index==0,x,y) }
                     }
                 }
+                vm.panelControls.forEachIndexed { index,control ->
+                    val original=control.id=="leftSlider" || control.id=="rightSlider"
+                    val itemWidth=if(control.type==PanelControlType.SLIDER)sliderWidth else minOf(150.dp,columnWidth)
+                    val itemHeight=if(control.type==PanelControlType.SLIDER)sliderHeight+(if(control.note.isBlank())0.dp else 16.dp) else 64.dp
+                    val defaultX=when(control.id) { "leftSlider" -> 0.dp;"rightSlider" -> width-sliderWidth;else -> ((index%3)*(itemWidth.value+8)).dp.coerceAtMost((width-itemWidth).coerceAtLeast(0.dp)) }
+                    val defaultY=if(original)0.dp else (height-itemHeight-8.dp*(index/3)).coerceAtLeast(0.dp)
+                    PositionedItem(vm,control.id,defaultX,defaultY,itemWidth,itemHeight,canvasPx) {
+                        if(control.type==PanelControlType.SLIDER)SliderControl(control.title,state.sliderValue(control.channel),active,vm.sliderConfigs[control.channel],control.note){vm.slider(control.channel,it)}
+                        else PanelButton(vm,control,active,state.sliderValue(control.channel))
+                    }
+                }
                 // Keep the fixed entry above movable controls so layout recovery is always reachable.
                 OutlinedButton({action("settings")},enabled=!vm.layoutEditing,shape=RoundedCornerShape(16.dp),
                     contentPadding=PaddingValues(8.dp),colors=ButtonDefaults.outlinedButtonColors(containerColor=Color.White,contentColor=Ink),
@@ -125,7 +131,7 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth().height(44.dp).softCard().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
                     var expanded by remember { mutableStateOf(false) }
-                    val names=mapOf("leftPad" to "左蓝色摇杆","rightPad" to "右蓝色摇杆","leftStick" to "左摇杆卡片","rightStick" to "右摇杆卡片","leftSlider" to "滑块 1","rightSlider" to "滑块 2","enable" to "蓝牙卡片")
+                    val names=mapOf("leftPad" to "左蓝色摇杆","rightPad" to "右蓝色摇杆","leftStick" to "左摇杆卡片","rightStick" to "右摇杆卡片","enable" to "蓝牙卡片")+vm.panelControls.associate { it.id to it.title }
                     Box {
                         TextButton({expanded=true},contentPadding=PaddingValues(3.dp)){Text("${names[vm.selectedLayoutId]} ▾",fontSize=10.sp)}
                         DropdownMenu(expanded,{expanded=false}) { names.forEach { (id,name)->DropdownMenuItem(text={Text(name)},onClick={vm.selectPanel(id);expanded=false}) } }
@@ -211,7 +217,7 @@ private fun BoxScope.PositionedItem(vm: RemoteViewModel,id: String,defaultX: Dp,
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SliderControl(title: String,value: Int,active: Boolean,config: SliderConfig,onChange: (Int)->Unit) {
+private fun SliderControl(title: String,value: Int,active: Boolean,config: SliderConfig,note: String="",onChange: (Int)->Unit) {
     Column(Modifier.fillMaxSize().softCard().padding(horizontal=10.dp,vertical=4.dp)) {
         Row(Modifier.fillMaxWidth().height(20.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
             Text(title,fontSize=11.sp,fontWeight=FontWeight.Bold)
@@ -229,6 +235,7 @@ private fun SliderControl(title: String,value: Int,active: Boolean,config: Slide
                 }
             }) },
             thumb={ Canvas(Modifier.size(20.dp)) { drawCircle(Color.White);drawCircle(if(active)Accent else Muted,radius=size.width*.34f) } })
+        if(note.isNotBlank())Text(note,fontSize=9.sp,lineHeight=11.sp,color=Muted,maxLines=1)
     }
 }
 
@@ -267,5 +274,25 @@ private fun StickControl(vm: RemoteViewModel,title: String,index: Int,x: Int,y: 
                 Text(config.mode.title,fontSize=10.sp)
             }
         }
+    }
+}
+
+@Composable
+private fun PanelButton(vm: RemoteViewModel,control: PanelControl,active: Boolean,value: Int) {
+    DisposableEffect(control.id) { onDispose { vm.panelCancel(control.id) } }
+    Column(Modifier.fillMaxSize().softCard().padding(6.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+        Box(Modifier.weight(1f).fillMaxWidth().background(if(active)Pad else Line,RoundedCornerShape(10.dp))
+            .testTag("control-${control.id}")
+            .pointerInput(control,active) {
+                if(active)try {
+                    detectTapGestures(onPress={
+                        vm.panelPress(control.id)
+                        if(tryAwaitRelease())vm.panelRelease(control.id) else vm.panelCancel(control.id)
+                    })
+                } finally { vm.panelCancel(control.id) }
+            },contentAlignment=Alignment.Center) {
+            Text("${control.title} · $value",fontSize=11.sp,fontWeight=FontWeight.Bold,maxLines=1)
+        }
+        if(control.note.isNotBlank())Text(control.note,fontSize=9.sp,lineHeight=12.sp,color=Muted,maxLines=1,modifier=Modifier.testTag("control-note-${control.id}"))
     }
 }

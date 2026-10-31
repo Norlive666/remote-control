@@ -96,13 +96,13 @@ private fun ControllerScreen(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth:
         }
     }
     EditablePanel(vm) { name ->
-        if(name=="settings")settingsDialog=true else if(!vm.layoutEditing)action(name)
+        if(name=="settings"){vm.setSettingsOpen(true);settingsDialog=true} else if(!vm.layoutEditing)action(name)
     }
     if(connectionDialog) Bt630ConnectionDialog(vm,scan,systemBluetooth) {
         if(vm.connecting)vm.disconnect() else vm.stopScan()
         connectionDialog=false
     }
-    if(settingsDialog) SettingsDialog(vm,onEdit={settingsDialog=false;vm.beginLayoutEdit()}) { settingsDialog=false }
+    if(settingsDialog) SettingsDialog(vm,onEdit={settingsDialog=false;vm.setSettingsOpen(false);vm.beginLayoutEdit()}) { settingsDialog=false;vm.setSettingsOpen(false) }
 }
 
 /** Separate gesture scope per stick; a pointer never transfers from one stick to the other. */
@@ -142,8 +142,9 @@ private fun SettingsDialog(vm: RemoteViewModel,onEdit: ()->Unit,onClose: ()->Uni
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth(.8f).heightIn(max=340.dp)) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose){Text("完成")} }
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) { Text("面板设置",fontSize=18.sp);TextButton(onClose,modifier=Modifier.testTag("settings-done")){Text("完成")} }
                 OutlinedButton(onEdit,modifier=Modifier.fillMaxWidth()){Text("编辑布局")}
+                PanelControlsSettings(vm)
                 GamepadSettings(vm)
                 SliderSettings(vm)
                 vm.stickConfigs.forEachIndexed { index,config ->

@@ -467,7 +467,7 @@ class ControllerUiTest {
         assertEquals(canvas.bottom,after.bottom,2f)
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()
     }
-    @Test fun slidersMoveWithoutChangingControlValues() {
+    @Test fun slidersMoveWhileLayoutEditingKeepsAllControlsNeutral() {
         compose.runOnIdle { model().setSliderConfig(0,SliderConfig(stepped=false));model().axes(true,300,400);model().slider(0,420) }
         editLayout()
         for(id in listOf("leftSlider","rightSlider")) {
@@ -479,9 +479,9 @@ class ControllerUiTest {
         }
         compose.runOnIdle {
             assertEquals(0,model().controls.lx);assertEquals(0,model().controls.ly)
-            assertEquals(420,model().controls.slider1)
+            assertEquals(0,model().controls.slider1)
             model().axes(true,800,800);model().slider(0,800);model().enable(true)
-            assertEquals(0,model().controls.lx);assertEquals(420,model().controls.slider1)
+            assertEquals(0,model().controls.lx);assertEquals(0,model().controls.slider1)
             assertFalse(model().controls.enabled)
         }
         compose.onNodeWithText("取消",useUnmergedTree=true).performClick()

@@ -26,9 +26,14 @@ class GamepadConfigTest {
         assertEquals(GamepadBinding(1,725),GamepadBinding(1,725).reconcile(slots))
     }
     @Test fun bindingLimitsMatchProtocol() {
-        for(binding in listOf(-1 to 0,2 to 0,0 to -1,1 to 1001)) {
+        for(binding in listOf(-1 to 0,4 to 0,0 to -1,1 to 1001)) {
             try { GamepadBinding(binding.first,binding.second);fail("Invalid binding accepted") } catch(_:IllegalArgumentException) {}
         }
+    }
+    @Test fun mappingSupportsNewChannelsAndReconcilesAgainstTheirOwnConfig() {
+        val configs=List(4) { if(it==3)SliderConfig(values=listOf(42,99)) else SliderConfig() }
+        assertEquals(GamepadBinding(2,2),GamepadBinding(2,2).reconcile(configs))
+        assertEquals(GamepadBinding(3,42),GamepadBinding(3,1).reconcile(configs))
     }
     @Test fun pressFiresOnceAndReleaseDoesNotSetAnotherValue() {
         val buttons=GamepadButtons()

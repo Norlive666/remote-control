@@ -2,7 +2,7 @@ package io.github.norlive.remotecontrol
 
 enum class GamepadButton(val title: String) { X("X"), Y("Y"), L1("L1 · 左肩键"), R1("R1 · 右肩键"), L2("L2 · 左扳机"), R2("R2 · 右扳机") }
 data class GamepadBinding(val slider: Int,val value: Int) {
-    init { require(slider in 0..1 && value in 0..1000) }
+    init { require(slider in 0..3 && value in 0..1000) }
     fun reconcile(configs: List<SliderConfig>): GamepadBinding {
         val config=configs[slider]
         return if(config.stepped && value !in config.values)copy(value=config.values.first()) else this
