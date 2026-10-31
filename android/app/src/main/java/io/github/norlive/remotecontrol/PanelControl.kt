@@ -43,7 +43,7 @@ class PanelButtonController(private val schedule: (Long,()->Unit)->(()->Unit),pr
                 write(press,0)
             } else {
                 activate(press,press.control.pressValue);pulses[id]=press
-                press.cancelTimer=schedule(100) { if(pulses[id]===press) { pulses.remove(id);write(press,0) } }
+                press.cancelTimer=schedule(500) { if(pulses[id]===press) { pulses.remove(id);write(press,0) } }
             }
             PanelControlType.CYCLE -> {
                 val index=(press.control.cycleValues.indexOf(current(press.control.channel))+1)%press.control.cycleValues.size

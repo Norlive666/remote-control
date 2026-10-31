@@ -71,7 +71,7 @@ private fun PanelControlEditor(original: PanelControl,allowSlider: Boolean,onSav
                 }
                 if(type==PanelControlType.SHORT_LONG)OutlinedTextField(long,{long=it},singleLine=true,label={Text("长按值（0～1000）")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.testTag("control-long-value"))
                 if(type==PanelControlType.CYCLE)OutlinedTextField(cycle,{cycle=it},singleLine=true,label={Text("循环值（2～8 个不同值，逗号分隔）")},modifier=Modifier.testTag("control-cycle-values"))
-                Text(when(type) { PanelControlType.SLIDER -> "使用目标通道的滑块档位设置。";PanelControlType.MOMENTARY -> "按下赋值，松开归零。";PanelControlType.SHORT_LONG -> "短按松开后发送 100 ms 脉冲；按住 500 ms 触发长按，松开归零。";PanelControlType.CYCLE -> "每次点击切换到下一数值，松开保持。" },style=MaterialTheme.typography.bodySmall)
+                Text(when(type) { PanelControlType.SLIDER -> "使用目标通道的滑块档位设置。";PanelControlType.MOMENTARY -> "按下赋值，松开归零。";PanelControlType.SHORT_LONG -> "短按松开后发送 500 ms 脉冲；按住 500 ms 触发长按，松开归零。";PanelControlType.CYCLE -> "每次点击切换到下一数值，松开保持。" },style=MaterialTheme.typography.bodySmall)
                 Row { TextButton(onClose){Text("取消")};Button({onSave(original.copy(title=title.trim(),note=note,channel=target,type=type,pressValue=pressValue?.coerceIn(0,1000) ?: 1,longValue=longValue?.coerceIn(0,1000) ?: 2,cycleValues=if(type==PanelControlType.CYCLE)cycleValues.map { it!! } else original.cycleValues))},enabled=valid,modifier=Modifier.testTag("control-save")){Text("保存控件")} }
             }
         }

@@ -19,12 +19,12 @@ class PanelControlTest {
         assertEquals(listOf("leftSlider","rightSlider"),defaultPanelControls().map { it.id })
         assertTrue(defaultPanelControls().all { it.type==PanelControlType.SLIDER && it.note.isEmpty() })
     }
-    @Test fun shortReleasePulsesFor100msAndLongNeverPulsesShort() {
+    @Test fun shortReleasePulsesFor500msAndLongNeverPulsesShort() {
         val clock=Clock();val values=IntArray(4)
         val buttons=PanelButtonController(clock::schedule,{clock.now},{values[it]}) { channel,value -> values[channel]=value }
         val control=PanelControl("a","a",type=PanelControlType.SHORT_LONG,channel=3,pressValue=5,longValue=9)
         buttons.press(control);clock.advance(499);buttons.release(control.id)
-        assertEquals(5,values[3]);clock.advance(99);assertEquals(5,values[3])
+        assertEquals(5,values[3]);clock.advance(499);assertEquals(5,values[3])
         clock.advance(1);assertEquals(0,values[3])
         buttons.press(control);clock.advance(500);assertEquals(9,values[3])
         buttons.release(control.id);assertEquals(0,values[3]);clock.advance(1000);assertEquals(0,values[3])
@@ -35,7 +35,7 @@ class PanelControlTest {
         val pulse=PanelControl("pulse","pulse",type=PanelControlType.SHORT_LONG,pressValue=5)
         val cycle=PanelControl("cycle","cycle",type=PanelControlType.CYCLE)
         buttons.press(pulse);buttons.release(pulse.id);assertEquals(5,values[0])
-        buttons.press(cycle);buttons.cancel(cycle.id);clock.advance(100)
+        buttons.press(cycle);buttons.cancel(cycle.id);clock.advance(500)
         assertEquals(0,values[0])
     }
     @Test fun waitingLongPressCancellationDoesNotEraseExistingHeldValue() {
