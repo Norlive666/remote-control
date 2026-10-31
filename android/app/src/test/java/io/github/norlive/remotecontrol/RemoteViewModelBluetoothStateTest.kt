@@ -41,8 +41,9 @@ class RemoteViewModelBluetoothStateTest {
                 runBlocking { doThrow(Bt630Failure("temporary")).`when`(client).open() }
             }.use { construction ->
                 vm.connect(row)
+                shadowOf(Looper.getMainLooper()).idle()
                 runCurrent()
-                assertEquals(1,construction.constructed().size)
+                assertEquals(vm.status,1,construction.constructed().size)
                 assertTrue(vm.connecting)
                 vm.axes(true,400,300)
                 app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_TURNING_OFF))
@@ -56,6 +57,7 @@ class RemoteViewModelBluetoothStateTest {
                 app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE,BluetoothAdapter.STATE_ON))
                 shadowOf(Looper.getMainLooper()).idle()
                 advanceTimeBy(5_000)
+                shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(5))
                 runCurrent()
                 assertEquals(1,construction.constructed().size)
                 assertFalse(vm.connecting)

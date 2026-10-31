@@ -243,10 +243,14 @@ class ControllerUiTest {
         FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         assertTrue(file.length()>0)
         // Gradle uninstalls the tested app afterward, so export before its files are removed.
-        val exported=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
-            "cp /sdcard/Android/data/io.github.norlive.remotecontrol/files/bt630-connection.png /sdcard/Download/bt630-connection.png 2>&1")
+        val automation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        val exported=automation.executeShellCommand(
+            "cp /sdcard/Android/data/io.github.norlive.remotecontrol/files/bt630-connection.png /sdcard/Download/bt630-connection.png")
         val output=android.os.ParcelFileDescriptor.AutoCloseInputStream(exported).bufferedReader().use { it.readText() }
         assertTrue(output,output.isBlank())
+        val size=automation.executeShellCommand("stat -c %s /sdcard/Download/bt630-connection.png")
+        val bytes=android.os.ParcelFileDescriptor.AutoCloseInputStream(size).bufferedReader().use { it.readText().trim() }
+        assertEquals("Exported screenshot must survive test app cleanup",file.length().toString(),bytes)
         compose.onNodeWithTag("bt630-help").performClick()
         compose.onNodeWithText("FFF0",substring=true,useUnmergedTree=true).assertExists()
     }
