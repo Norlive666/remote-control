@@ -6,7 +6,7 @@
 
 ## 1. 下载与通信链路
 
-- [Android APK v1.6.0](https://github.com/Norlive666/remote-control/releases/download/v1.6.0/remote-control-v1.6.0.apk)：Android 8.0 及以上。
+- [Android APK v1.7.0](https://github.com/Norlive666/remote-control/releases/download/v1.7.0/remote-control-v1.7.0.apk)：Android 8.0 及以上。
 - [STM32 驱动包 v3.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.0.0/remote-control-stm32-v3.0.0.zip)：H723、F103 两套独立的 `.c/.h`。
 - 仓库源码：[H723](../stm32/h723/)、[F103](../stm32/f103/)。一次只加入与芯片匹配的一套。
 
