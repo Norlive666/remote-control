@@ -10,6 +10,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import android.Manifest
 import android.os.Build
+import org.junit.After
 import org.junit.Before
 import org.junit.Assert.*
 import org.junit.Rule
@@ -23,8 +24,14 @@ class ControllerUiTest {
     @get:Rule val permissions=GrantPermissionRule.grant(*if(Build.VERSION.SDK_INT>=31) arrayOf(Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION) else arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION))
     @get:Rule val compose=createAndroidComposeRule<MainActivity>()
     private fun model()=(compose.activity.application as RemoteApplication).controller
+    @After fun clearController() {
+        compose.runOnIdle {
+            model().setKeepBackground(false);model().disconnect()
+            (compose.activity.application as RemoteApplication).viewModelStore.clear()
+        }
+    }
     @Before fun resetSavedLayout() {
-        compose.runOnIdle { model().apply { beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
+        compose.runOnIdle { model().apply { setKeepBackground(false);updateSettingsOpen(false);cancelLayoutEdit();beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()

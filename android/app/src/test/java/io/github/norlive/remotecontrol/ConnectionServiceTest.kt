@@ -1,6 +1,10 @@
 package io.github.norlive.remotecontrol
 
 import android.content.Intent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -10,6 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[33],application=RemoteApplication::class,manifest=Config.NONE)
 class ConnectionServiceTest {
@@ -86,4 +91,41 @@ class ConnectionServiceTest {
         assertEquals(700,vm.controls.lx)
         vm.disconnect();vm.foreground(false)
     }
+    @Test fun activeSenderKeepsEnabledValuesAndSequenceAcrossBackgroundAndReturn() = runTest {
+        val vm=prepare()
+        val state=RemoteViewModel::class.java.getDeclaredField("session").apply { isAccessible=true }.get(vm) as ControlSession
+        val frames=mutableListOf<ByteArray>()
+        var sequence=0
+        val engine=Bt630Session(backgroundScope,
+            linkFactory={ object: Bt630Session.Link {
+                override suspend fun open() {}
+                override suspend fun send(frame: ByteArray) { frames.add(frame) }
+                override fun close() {}
+            } },frame={ControlProtocol.encode(state.state,sequence++)},pauseControls={vm.suspendGamepad()},stateChanged={},sent={})
+        field(vm,"btSession",engine)
+        val service=Robolectric.buildService(ConnectionService::class.java).create()
+        service.get().onStartCommand(intent(),0,1)
+        engine.start();runCurrent()
+        state.enable(true);vm.axes(true,700,400);vm.slider(0,2)
+        val before=frames.size
+        vm.foreground(false)
+        advanceTimeBy(100);runCurrent()
+        assertTrue(frames.size>before)
+        val retained=frames.last()
+        assertEquals(20,retained.size)
+        assertEquals(1,retained[17].toInt() and 1)
+        assertEquals(700,(retained[4].toInt() and 255) or ((retained[5].toInt() and 255) shl 8))
+        assertEquals(2,vm.controls.slider1)
+        assertSame(vm,RuntimeEnvironment.getApplication<RemoteApplication>().controller)
+        vm.foreground(true)
+        assertTrue(vm.controls.enabled)
+        advanceTimeBy(40);runCurrent()
+        frames.zipWithNext().forEach { (a,b) -> assertEquals((a[3].toInt()+1) and 255,b[3].toInt() and 255) }
+        vm.disconnect()
+        val stopped=frames.size
+        advanceTimeBy(100);runCurrent()
+        assertEquals(stopped,frames.size)
+        service.destroy();vm.foreground(false)
+    }
+
 }

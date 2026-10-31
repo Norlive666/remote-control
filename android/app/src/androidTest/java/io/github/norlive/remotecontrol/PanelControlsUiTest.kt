@@ -20,14 +20,14 @@ class PanelControlsUiTest {
     private fun model()=(compose.activity.application as RemoteApplication).controller
     private fun reset() {
         model().apply {
-            updateSettingsOpen(false);cancelLayoutEdit()
+            setKeepBackground(false);disconnect();updateSettingsOpen(false);cancelLayoutEdit()
             panelControls.toList().forEach { deletePanelControl(it.id) };defaultPanelControls().forEach(::savePanelControl)
             repeat(4) { setSliderConfig(it,SliderConfig()) }
             beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit()
         }
     }
     @Before fun setup() { compose.runOnIdle { reset() } }
-    @After fun cleanup() { compose.runOnIdle { reset() } }
+    @After fun cleanup() { compose.runOnIdle { reset();(compose.activity.application as RemoteApplication).viewModelStore.clear() } }
     @Test fun recreatingActivityWithSettingsOpenKeepsVisibleDialogAndCanResumeInput() {
         compose.onNodeWithTag("panel-settings").performClick()
         compose.runOnIdle { assertTrue(model().settingsOpen) }
