@@ -1,5 +1,6 @@
 # STM32 v4.0.0 — 单一带参数初始化接口
 
+- [stm32-v4.0.0已发布](https://github.com/Norlive666/remote-control/releases/tag/stm32-v4.0.0)，标签源码`9ed385be5293ec76a34c97e11e1565977e052ee9`。6个文件与源码一致，重新下载公开ZIP及校验文件与本机逐字节一致，SHA256 `d22144d62db7256ce5c3240acff64b2ca7bec422ada55d9beaf9e72f599baef3`。[GitHub检查41306652847](https://github.com/Norlive666/remote-control/actions/runs/41306652847)的H723任务124848304297及Android构建/单元任务124848304357通过；本条不声称尚在运行的UI任务结果。目标文件符号检查仅导出`RC_Init`一个初始化函数。独立复核的两处文档用词已修正并复审，无遗留问题。
 - 初始化仅保留`HAL_StatusTypeDef RC_Init(uint32_t baud)`；删除两个旧别名及默认波特率宏，必须显式传入波特率。源码和头文件一起替换，旧调用需要同步修改，例如原`RC_InitBaud(120000U)`改为`RC_Init(120000U)`。App仍为v1.9.0，协议、引脚、TIM5和接收反相规则不变；没有修改本机Vela_Gimbal工程。
 - 先将初始化测试改为新接口，在旧实现得到明确的编译契约失败：`RC_Init`应无参数却传入一个。修改后协议测试、43个初始化/私有中断场景及非法反相拒绝通过，ARM编译及生成IRQ共存链接通过。新增120MHz时钟下`RC_Init(120000U)`得到BRR=1000、TIM5 PSC=239/ARR=999，并验证同参幂等和换参返回HAL_BUSY。
 - 驱动`.c`与上版比较，仅初始化实现改名和删除两个包装函数，函数体与其他代码逐字节一致。当前文档已统一为带参数调用。以上是编译和模拟测试，不是实际UART时序或波特率根因确认。
