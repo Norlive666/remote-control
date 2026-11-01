@@ -1,12 +1,12 @@
 # BT630 移植与排障指南
 
-更新日期：2026-10-31。以本仓库 STM32 驱动 `stm32-v3.0.0` 和 Android App `v1.8.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
+更新日期：2026-11-01。以本仓库 STM32 驱动 `stm32-v3.0.0` 和 Android App `v1.9.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
 
 本文说明怎样把 BT630 接到新的 STM32 HAL 工程，以及怎样区分手机连接、UART 接收、协议解析和业务控制问题。芯片通用说明见 [STM32 接入文档](stm32.md)，完整帧格式见 [协议文档](../protocol/README.md)。
 
 ## 1. 下载与通信链路
 
-- [Android APK v1.8.0](https://github.com/Norlive666/remote-control/releases/download/v1.8.0/remote-control-v1.8.0.apk)：Android 8.0 及以上。
+- [Android APK v1.9.0](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)：Android 8.0 及以上。
 - [STM32 驱动包 v3.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.0.0/remote-control-stm32-v3.0.0.zip)：H723、F103 两套独立的 `.c/.h`。
 - 仓库源码：[H723](../stm32/h723/)、[F103](../stm32/f103/)。一次只加入与芯片匹配的一套。
 
@@ -45,7 +45,7 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 
 当前 App 仅使用上述 BT630 UUID 组，未提供自定义 UUID。模块名称可以改变；扫描不按名称过滤。手机 App 的发送频率不会自动改变模块 UART 波特率。连接窗口将详细权限说明、UUID、扫描数量及错误诊断放在帮助中，不占用默认设备列表空间。
 
-连接失败或意外断线时，一轮最多尝试 5 次（含首次），间隔 1、2、4、4 秒；稳定就绪满 10 秒后，下一次断线可启动新一轮。主动断开或取消会停止重试；默认进入后台也停止，开启后台保持并成功启动服务后可在后台继续本轮有上限的重试。每次连接或失联均关闭使能并清零控制量，重连后先发送禁用帧，需用户重新手动使能。服务/特征不匹配、蓝牙关闭或权限不足直接停止，不靠反复重试掩盖配置错误。扫描不能同时干扰已经建立或正在重试的控制链路。
+暂时连接失败或意外断线时持续重试，间隔1、2、4、5、5秒，单次连接超时10秒；稳定就绪满10秒后重置退避。短按主连接键：无记录时打开列表，有记录时直连；连接/等待中再次短按取消，已连接时短按断开。长按仅打开列表，连接成功后才更新本机设备记录。主动断开或取消会停止重试；默认进入后台也停止，开启后台保持并成功启动服务后可在后台继续等待。每次连接或失联均关闭使能并清零控制量，重连后先发送禁用帧，需用户重新手动使能。服务/特征不匹配、蓝牙关闭或权限不足直接停止，不靠反复重试掩盖配置错误。扫描不能同时干扰已经建立或正在重试的控制链路。
 
 ## 3. 接线、反相与固定外设
 
@@ -202,7 +202,7 @@ App v1.5.1 及此前相关版本使用 Nordic Android BLE Library 2.11.0。其 `
 v1.6.0 改为原生 GATT 连接，参考用户提供的 [bt_mcu](https://gitee.com/xie-rongji/bt_mcu)，保留其扫描、连接、服务发现与特征读写流程，并增加状态检查及可取消重试。源码：
 
 - [`Bt630GattClient.kt`](../android/app/src/main/java/io/github/norlive/remotecontrol/Bt630GattClient.kt)：检查 FFF0/FFF2，等待 FFF1 通知订阅完成后才就绪；优先使用带响应写入，不支持时回落无响应写入。每次写入检查系统返回值和回调状态，超时后关闭失效 GATT。
-- [`Bt630Session.kt`](../android/app/src/main/java/io/github/norlive/remotecontrol/Bt630Session.kt)：串行发送最新的 20 字节帧，完成后延迟 20 ms；执行五次上限、间隔、取消及失联禁用。
+- [`Bt630Session.kt`](../android/app/src/main/java/io/github/norlive/remotecontrol/Bt630Session.kt)：串行发送最新的 20 字节帧，完成后延迟 20 ms；执行持续重试、退避间隔、取消及失联禁用。
 - [`RemoteViewModel.kt`](../android/app/src/main/java/io/github/norlive/remotecontrol/RemoteViewModel.kt)：连接面板输入与会话状态，收到 FFF1 原始通知可在设置中查看。蓝牙写入成功仍不表示 MCU 已收包。
 
 旧版 `-5` 对应写请求在 1 秒内未完成，旧库超时路径及 App 会结束连接。[旧库超时实现](https://github.com/NordicSemiconductor/Android-BLE-Library/blob/2.11.0/ble/src/main/java/no/nordicsemi/android/ble/TimeoutableRequest.java) 新版仍保留连接 10 秒、写入 1 秒的期限，但将失败阶段和完整诊断放在帮助中，并按上述规则重新建立链路，不把过期控制帧放回发送队列。更换连接实现不等于已经证明所有手机或模块的偶发超时根因都已解决。
