@@ -55,42 +55,58 @@ class Bt630SessionTest {
         h.session.stop()
     }
 
-    @Test fun fifthFailureStopsAndNeverMakesSixthAttempt() = runTest {
+    @Test fun transientFailuresContinuePastSixAttemptsWithFiveSecondCapUntilCancelled() = runTest {
         val h = Harness(this) { Link { error("temporary") } }
-        h.session.start(); advanceTimeBy(11_001); runCurrent()
-        assertEquals(5, h.links.size)
-        assertTrue(h.links.all { it.closed })
-        assertTrue(h.states.last() is Bt630Session.State.Failed)
-        advanceTimeBy(100_000); runCurrent(); assertEquals(5, h.links.size)
+        h.session.start(); runCurrent()
+        for ((time, count) in listOf(999L to 1, 1_000L to 2, 3_000L to 3, 7_000L to 4,
+            11_999L to 4, 12_000L to 5, 16_999L to 5, 17_000L to 6, 22_000L to 7)) {
+            advanceTimeBy(time-testScheduler.currentTime);runCurrent()
+            assertEquals("Attempts at $time ms",count,h.links.size)
+            assertTrue(h.links.all { it.closed })
+        }
+        assertTrue(h.states.last() is Bt630Session.State.Connecting)
+        h.session.stop();advanceTimeBy(100_000);runCurrent()
+        assertEquals(7,h.links.size)
+        assertEquals(Bt630Session.State.Idle,h.states.last())
     }
 
-    @Test fun unstableReadyAndWriteFailuresConsumeTheSameBudget() = runTest {
+    @Test fun unstableReadyAndWriteFailuresKeepRetryingWithControlsPaused() = runTest {
         val h = Harness(this) { Link().apply { sendAction = { error("write") } } }
-        h.session.start(); advanceTimeBy(11_001); runCurrent()
-        assertEquals(5, h.links.size)
-        assertTrue(h.states.last() is Bt630Session.State.Failed)
-        assertEquals("pause", h.events[h.events.indexOf("open", h.events.indexOf("open") + 1) - 1])
-    }
-
-    @Test fun tenSecondsReadyResetsBudgetForTheNextLoss() = runTest {
-        val h = Harness(this) { n -> Link { if (n < 5) error("open") } }
-        h.session.start(); advanceTimeBy(11_000); runCurrent()
-        assertEquals(5, h.links.size)
-        advanceTimeBy(10_000); runCurrent()
-        h.losses.last()("lost"); runCurrent()
-        advanceTimeBy(1_000); runCurrent()
+        h.session.start(); advanceTimeBy(17_000); runCurrent()
         assertEquals(6, h.links.size)
-        assertEquals(1, (h.states.filterIsInstance<Bt630Session.State.Connecting>().last()).attempt)
+        assertTrue(h.states.last() is Bt630Session.State.Connecting)
+        assertFalse(h.enabled)
+        assertEquals("pause", h.events[h.events.indexOf("open", h.events.indexOf("open") + 1) - 1])
         h.session.stop()
     }
 
-    @Test fun lossJustBeforeTenSecondsDoesNotResetBudget() = runTest {
+    @Test fun tenSecondsReadyResetsBackoffForTheNextLoss() = runTest {
         val h = Harness(this) { n -> Link { if (n < 5) error("open") } }
-        h.session.start(); advanceTimeBy(11_000); runCurrent()
+        h.session.start(); advanceTimeBy(12_000); runCurrent()
+        assertEquals(5, h.links.size)
+        advanceTimeBy(10_000); runCurrent()
+        h.losses.last()("lost"); runCurrent()
+        advanceTimeBy(999);runCurrent();assertEquals(5,h.links.size)
+        advanceTimeBy(1); runCurrent()
+        assertEquals(6, h.links.size)
+        assertEquals(1, h.states.filterIsInstance<Bt630Session.State.Connecting>().last().attempt)
+        h.session.stop()
+    }
+
+    @Test fun lossJustBeforeTenSecondsKeepsFiveSecondBackoff() = runTest {
+        val h = Harness(this) { n -> Link { if (n < 5) error("open") } }
+        h.session.start(); advanceTimeBy(12_000); runCurrent()
         advanceTimeBy(9_999); runCurrent()
         h.losses.last()("lost"); runCurrent()
-        advanceTimeBy(20_000); runCurrent()
-        assertEquals(5, h.links.size)
+        advanceTimeBy(4_999);runCurrent();assertEquals(5,h.links.size)
+        advanceTimeBy(1);runCurrent();assertEquals(6,h.links.size)
+        h.session.stop()
+    }
+
+    @Test fun securityFailureStopsWithoutRetry() = runTest {
+        val h = Harness(this) { Link { throw SecurityException("permission revoked") } }
+        h.session.start();advanceTimeBy(100_000);runCurrent()
+        assertEquals(1,h.links.size)
         assertTrue(h.states.last() is Bt630Session.State.Failed)
     }
 

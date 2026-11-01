@@ -27,11 +27,64 @@ class ControllerUiTest {
     @After fun clearController() {
         compose.runOnIdle {
             model().updateKeepBackground(false);model().disconnect()
+            compose.activity.getSharedPreferences("controller",0).edit().remove("connection.last.name").remove("connection.last.address").commit()
             (compose.activity.application as RemoteApplication).viewModelStore.clear()
         }
     }
     @Before fun resetSavedLayout() {
         compose.runOnIdle { model().apply { updateKeepBackground(false);updateSettingsOpen(false);cancelLayoutEdit();beginLayoutEdit();defaultLayoutDraft();saveLayoutEdit();setStickConfig(0,JoystickConfig());setStickConfig(1,JoystickConfig());setSliderConfig(0,SliderConfig());setSliderConfig(1,SliderConfig());resetGamepadBindings() } }
+    }
+    private fun rememberDevice() {
+        compose.runOnIdle {
+            compose.activity.getSharedPreferences("controller",0).edit()
+                .putString("connection.last.name","Remembered BT630").putString("connection.last.address","F2:E7:05:FA:F8:F2").commit()
+            (compose.activity.application as RemoteApplication).viewModelStore.clear()
+        }
+        compose.activityRule.scenario.recreate()
+    }
+    private fun connectionState(connected: Boolean,connecting: Boolean) {
+        for ((name,value) in listOf("connected" to connected,"connecting" to connecting)) {
+            @Suppress("UNCHECKED_CAST")
+            val state=RemoteViewModel::class.java.getDeclaredField("${name}\$delegate").apply { isAccessible=true }.get(model()) as MutableState<Boolean>
+            state.value=value
+        }
+    }
+    @Test fun rememberedDeviceReloadDoesNotAutoconnectAndShortClickConnectsThenCancels() {
+        rememberDevice()
+        compose.runOnIdle { assertFalse(model().connected);assertFalse(model().connecting);assertNull(model().selectedDevice) }
+        compose.onNodeWithTag("connection-open").performClick()
+        compose.onNodeWithTag("bt630-dialog").assertDoesNotExist()
+        compose.runOnIdle { assertEquals("F2:E7:05:FA:F8:F2",model().selectedDevice?.address);assertTrue(model().connecting);assertFalse(model().scanning) }
+        compose.onNodeWithTag("connection-open").performClick()
+        compose.runOnIdle { assertFalse(model().connecting);assertNull(model().selectedDevice) }
+    }
+    @Test fun shortClickWhileConnectedDisconnectsWithoutOpeningList() {
+        compose.runOnIdle { connectionState(true,false) }
+        compose.onNodeWithTag("connection-open").performClick()
+        compose.runOnIdle { assertFalse(model().connected) }
+        compose.onNodeWithTag("bt630-dialog").assertDoesNotExist()
+    }
+    @Test fun longPressOpensListWithoutShortClickDisconnectAndClosePreservesWait() {
+        compose.runOnIdle { connectionState(false,true) }
+        compose.onNodeWithTag("connection-open").performTouchInput { longClick() }
+        compose.onNodeWithTag("bt630-dialog").assertExists()
+        compose.runOnIdle { assertTrue(model().connecting) }
+        compose.onNodeWithTag("bt630-close").performClick()
+        compose.runOnIdle { assertTrue(model().connecting) }
+        compose.onNodeWithTag("connection-open").performTouchInput { longClick() }
+        compose.onNodeWithTag("bt630-cancel").performClick()
+        compose.runOnIdle { assertFalse(model().connecting) }
+    }
+    @Test fun longPressRememberedIdleDeviceOnlyOpensListAndConnectedLongPressKeepsConnection() {
+        rememberDevice()
+        compose.onNodeWithTag("connection-open").performTouchInput { longClick() }
+        compose.onNodeWithTag("bt630-dialog").assertExists()
+        compose.runOnIdle { assertNull(model().selectedDevice);assertFalse(model().connecting) }
+        compose.onNodeWithTag("bt630-close").performClick()
+        compose.runOnIdle { connectionState(true,false) }
+        compose.onNodeWithTag("connection-open").performTouchInput { longClick() }
+        compose.onNodeWithTag("bt630-dialog").assertExists()
+        compose.runOnIdle { assertTrue(model().connected) }
     }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
@@ -272,7 +325,7 @@ class ControllerUiTest {
         compose.onNodeWithTag("bt630-device-F2:E7:05:FA:F8:F2").assertExists()
         compose.onNodeWithTag("bt630-connect-F2:E7:05:FA:F8:F2").performClick()
         compose.onNodeWithTag("bt630-dialog").assertExists()
-        compose.onNodeWithTag("bt630-status").assertTextContains("1/5",substring=true)
+        compose.onNodeWithTag("bt630-status").assertTextContains("第 1 次",substring=true)
         compose.runOnIdle { vm.refreshDevices();assertTrue(vm.connecting) }
         compose.onNodeWithTag("bt630-cancel").assertExists().performClick()
         compose.runOnIdle { assertFalse(vm.connecting);assertFalse(vm.connected) }
