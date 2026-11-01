@@ -58,8 +58,58 @@ internal val Pad=Color(0xffeaf1f8)
 class MainActivity : ComponentActivity() {
     private val model by lazy { (application as RemoteApplication).controller }
     internal val gamepad by lazy { GamepadInput(this,model) }
+    private sealed interface BluetoothAction {
+        data object Scan: BluetoothAction
+        data object LastDevice: BluetoothAction
+        data class Select(val row: DeviceRow): BluetoothAction
+    }
+    private data class PermissionIntent(val action: BluetoothAction,val generation: Int)
+    private var pendingPermission: PermissionIntent?=null
+    private var launchedPermission: PermissionIntent?=null
+    private var permissionResult: Boolean?=null
+    private var started=false
     private val permissionRequest=registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if(result.values.all { it })model.refreshDevices() else model.error("请在系统应用设置中允许附近设备和精确位置权限，定位权限仅用于蓝牙搜索")
+        val request=launchedPermission
+        launchedPermission=null
+        if(request!=null && pendingPermission===request) {
+            permissionResult=result.isNotEmpty() && result.values.all { it }
+            completePermission()
+        }
+    }
+    private fun completePermission() {
+        if(!started)return
+        val granted=permissionResult ?: return
+        val request=pendingPermission
+        pendingPermission=null;permissionResult=null
+        if(request==null || request.generation!=model.connectionGeneration)return
+        if(granted)performBluetooth(request.action)
+        else model.error(if(request.action==BluetoothAction.Scan)"请在系统应用设置中允许附近设备和精确位置权限，定位权限仅用于蓝牙搜索" else "请在系统应用设置中允许附近设备连接权限")
+    }
+    private fun performBluetooth(action: BluetoothAction) {
+        when(action) {
+            BluetoothAction.Scan -> model.refreshDevices()
+            BluetoothAction.LastDevice -> model.connectLastDevice()
+            is BluetoothAction.Select -> model.connect(action.row)
+        }
+    }
+    private fun requestBluetooth(action: BluetoothAction) {
+        // A second activation cancels the pending action; an old dialog result cannot replay it.
+        if(launchedPermission!=null) { pendingPermission=null;permissionResult=null;return }
+        val required=if(action==BluetoothAction.Scan)model.permissions()
+            else if(android.os.Build.VERSION.SDK_INT>=31)arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT) else emptyArray()
+        val granted=required.filter { checkSelfPermission(it)==PackageManager.PERMISSION_GRANTED }.toSet()
+        val missing=if(action==BluetoothAction.Scan)model.permissions(granted) else required.filterNot { it in granted }.toTypedArray()
+        if(missing.isEmpty())performBluetooth(action)
+        else {
+            val request=PermissionIntent(action,model.connectionGeneration)
+            pendingPermission=request;launchedPermission=request
+            permissionRequest.launch(missing)
+        }
+    }
+    private fun cancelConnection() { pendingPermission=null;permissionResult=null;model.disconnect() }
+    private fun closeDevices() {
+        if(pendingPermission?.action==BluetoothAction.Scan) { pendingPermission=null;permissionResult=null }
+        model.stopScan()
     }
     private val notificationRequest=registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private fun backgroundConnection(value: Boolean) {
@@ -75,36 +125,40 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             MaterialTheme(colorScheme=lightColorScheme(primary=Accent,background=Surface,surface=Color.White,onSurface=Ink,onBackground=Ink,primaryContainer=Pad,onPrimaryContainer=Ink,secondaryContainer=Line,onSecondaryContainer=Ink)) {
-                ControllerScreen(model,::backgroundConnection,::findDevices,{startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))})
+                ControllerScreen(model,::backgroundConnection,::findDevices,{requestBluetooth(BluetoothAction.LastDevice)},
+                    {requestBluetooth(BluetoothAction.Select(it))},::cancelConnection,::closeDevices,{startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))})
             }
         }
     }
-    private fun findDevices() {
-        val granted=model.permissions().filter { checkSelfPermission(it)==PackageManager.PERMISSION_GRANTED }.toSet()
-        val missing=model.permissions(granted)
-        if(missing.isEmpty())model.refreshDevices() else permissionRequest.launch(missing)
+    private fun findDevices() { requestBluetooth(BluetoothAction.Scan) }
+    override fun onStart() { super.onStart();started=true;model.foreground(true);gamepad.start();completePermission() }
+    override fun onStop() {
+        started=false;pendingPermission=null;permissionResult=null
+        gamepad.stop();model.foreground(false);super.onStop()
     }
-    override fun onStart() { super.onStart();model.foreground(true);gamepad.start() }
-    override fun onStop() { gamepad.stop();model.foreground(false);super.onStop() }
     override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus);gamepad.focus(hasFocus) }
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepad.key(event) || super.dispatchKeyEvent(event)
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean = gamepad.motion(event) || super.dispatchGenericMotionEvent(event)
 }
 
 @Composable
-private fun ControllerScreen(vm: RemoteViewModel,backgroundConnection: (Boolean)->Unit,scan: ()->Unit,systemBluetooth: ()->Unit) {
+private fun ControllerScreen(vm: RemoteViewModel,backgroundConnection: (Boolean)->Unit,scan: ()->Unit,
+    connectLast: ()->Unit,connect: (DeviceRow)->Unit,cancel: ()->Unit,closeDevices: ()->Unit,systemBluetooth: ()->Unit) {
     var connectionDialog by remember { mutableStateOf(false) }
-    fun action(name: String) {
-        when(name) {
-            "connect" -> { connectionDialog=true;if(!vm.connected && !vm.connecting)scan() }
+    fun openDevices() { connectionDialog=true;if(!vm.connected && !vm.connecting)scan() }
+    EditablePanel(vm) { name ->
+        if(name=="settings")vm.updateSettingsOpen(true)
+        else if(!vm.layoutEditing)when(name) {
+            "devices" -> openDevices()
+            "connect" -> when {
+                vm.connected || vm.connecting -> cancel()
+                vm.lastDevice!=null -> connectLast()
+                else -> openDevices()
+            }
         }
     }
-    EditablePanel(vm) { name ->
-        if(name=="settings")vm.updateSettingsOpen(true) else if(!vm.layoutEditing)action(name)
-    }
-    if(connectionDialog) Bt630ConnectionDialog(vm,scan,systemBluetooth) {
-        if(vm.connecting)vm.disconnect() else vm.stopScan()
-        connectionDialog=false
+    if(connectionDialog) Bt630ConnectionDialog(vm,scan,systemBluetooth,connect,cancel) {
+        closeDevices();connectionDialog=false
     }
     if(vm.settingsOpen) SettingsDialog(vm,backgroundConnection,onEdit={vm.updateSettingsOpen(false);vm.beginLayoutEdit()}) { vm.updateSettingsOpen(false) }
 }

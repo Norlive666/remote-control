@@ -29,6 +29,7 @@ const val BT630_PERIOD_MS=20L
 data class DeviceRow(val name: String, val address: String, val device: BluetoothDevice,val viaBle: Boolean=false,val viaSystem: Boolean=false) {
     val source: String get()=if(viaBle && viaSystem)"BLE + 系统发现" else if(viaBle)"BLE" else "系统发现"
 }
+data class RememberedDevice(val name: String,val address: String)
 internal fun mergeDeviceRows(rows: List<DeviceRow>,incoming: DeviceRow): List<DeviceRow> {
     val old=rows.firstOrNull { it.address==incoming.address }
     val merged=incoming.copy(
@@ -67,6 +68,9 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var controls by mutableStateOf(session.state); private set
     var status by mutableStateOf("未连接"); private set
     var connectionError by mutableStateOf(""); private set
+    var lastDevice by mutableStateOf(preferences.getString("connection.last.address",null)?.takeIf { BluetoothAdapter.checkBluetoothAddress(it) }?.let { address ->
+        RememberedDevice(preferences.getString("connection.last.name",null) ?: "BT630",address)
+    }); private set
     var selectedDevice by mutableStateOf<DeviceRow?>(null); private set
     var connected by mutableStateOf(false); private set
     var connecting by mutableStateOf(false); private set
@@ -112,6 +116,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private var bleScanNote="未启动"
     private var systemScanNote="未启动"
     private var generation=0
+    internal val connectionGeneration get()=generation
     private var foreground=false
     internal var gamepadDeviceId: Int?=null; private set
     private val inputManager=application.getSystemService(android.hardware.input.InputManager::class.java)
@@ -272,6 +277,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         if(scanDetails.isNotEmpty())updateScanDetails()
         if(status.startsWith("正在扫描"))status="扫描已停止"
     }
+    fun connectLastDevice() {
+        val saved=lastDevice ?: return
+        try {
+            val device=adapter?.getRemoteDevice(saved.address) ?: run { error("手机不支持蓝牙");return }
+            connect(DeviceRow(saved.name,saved.address,device))
+        } catch(_: SecurityException) { error("请允许附近设备连接权限") }
+    }
     fun connect(row: DeviceRow) {
         disconnect();if(!foreground)return
         if(adapter?.isEnabled!=true){status="请先开启手机蓝牙";return}
@@ -286,9 +298,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             stateChanged={ state -> if(token==generation)when(state) {
                 is Bt630Session.State.Connecting -> {
                     connected=false;connecting=true;connectionError=state.error ?: ""
-                    status="连接 ${row.name} · 第 ${state.attempt}/5 次"
+                    status="连接 ${row.name} · 第 ${state.attempt} 次 · 点击取消"
                 }
-                Bt630Session.State.Ready -> { connected=true;connecting=false;connectionError="";status="已连接 ${row.name} · 请手动使能" }
+                Bt630Session.State.Ready -> {
+                    lastDevice=RememberedDevice(row.name,row.address)
+                    preferences.edit().putString("connection.last.name",row.name).putString("connection.last.address",row.address).apply()
+                    connected=true;connecting=false;connectionError="";status="已连接 ${row.name} · 请手动使能"
+                }
                 is Bt630Session.State.Failed -> { connected=false;connecting=false;connectionError=state.error;status="连接失败 · 请查看帮助";btSession=null;stopBackgroundService();if(!foreground)unregisterAdapterObserver() }
                 Bt630Session.State.Idle -> { connected=false;connecting=false;status="未连接" }
             } },

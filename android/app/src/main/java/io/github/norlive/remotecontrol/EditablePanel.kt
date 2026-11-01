@@ -2,6 +2,10 @@ package io.github.norlive.remotecontrol
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -90,7 +94,7 @@ internal fun EditablePanel(vm: RemoteViewModel,action: (String)->Unit) {
                     Text(if(vm.layoutEditing)"编辑布局" else "操控面板",fontSize=18.sp,fontWeight=FontWeight.Bold)
                 }
                 PositionedItem(vm,"enable",middleX,hubY,columnWidth,hubHeight,canvasPx) {
-                    BluetoothHub(vm){action("connect")}
+                    BluetoothHub(vm,{action("connect")},{action("devices")})
                 }
                 if(vm.padCanvas)listOf("leftStick" to "leftPad","rightStick" to "rightPad").forEachIndexed { index,(cardId,padId) ->
                     val cardScale=panelScale(vm.layoutScales[cardId] ?: 1f,columnWidth.value,stickHeight.value,columnWidth.value*.3f,stickHeight.value*.3f,width.value,height.value)
@@ -160,15 +164,19 @@ private fun Modifier.softCard(): Modifier {
 }
 
 @Composable
-private fun BluetoothHub(vm: RemoteViewModel,onConnect: ()->Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun BluetoothHub(vm: RemoteViewModel,onConnect: ()->Unit,onDevices: ()->Unit) {
     Column(Modifier.fillMaxSize().softCard().padding(8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.SpaceBetween) {
-        FilledTonalButton(onConnect,enabled=!vm.layoutEditing,shape=RoundedCornerShape(14.dp),contentPadding=PaddingValues(horizontal=8.dp,vertical=3.dp),
-            colors=ButtonDefaults.filledTonalButtonColors(containerColor=Color(0xffe1f5fe),contentColor=Accent),modifier=Modifier.fillMaxWidth().height(38.dp).testTag("connection-open")) {
-            Icon(Icons.Outlined.Bluetooth,null,Modifier.size(20.dp))
+        Row(Modifier.fillMaxWidth().height(38.dp).testTag("connection-open").clip(RoundedCornerShape(14.dp))
+            .background(Color(0xffe1f5fe)).combinedClickable(enabled=!vm.layoutEditing,role=Role.Button,
+                onClick=onConnect,onLongClick=onDevices,onLongClickLabel="选择蓝牙设备")
+            .padding(horizontal=8.dp,vertical=3.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.Center) {
+            Icon(Icons.Outlined.Bluetooth,null,Modifier.size(20.dp),tint=Accent)
             Spacer(Modifier.width(8.dp))
             Column {
-                Text("FSC-BT630",fontSize=11.sp,lineHeight=12.sp,fontWeight=FontWeight.Bold)
-                Text(if(vm.connected)"点击查看连接" else "点击配对连接",fontSize=9.sp,lineHeight=10.sp,color=Muted)
+                Text(vm.selectedDevice?.name ?: vm.lastDevice?.name ?: "FSC-BT630",fontSize=11.sp,lineHeight=12.sp,fontWeight=FontWeight.Bold,maxLines=1)
+                Text(when { vm.connected -> "短按断开 · 长按选设备";vm.connecting -> "短按取消 · 长按选设备";
+                    vm.lastDevice!=null -> "短按连接 · 长按选设备";else -> "短按或长按选择设备" },fontSize=9.sp,lineHeight=10.sp,color=Muted,maxLines=1)
             }
         }
         Text(if(vm.layoutEditing)"使能已关闭" else vm.status,fontSize=10.sp,color=Muted,maxLines=1)

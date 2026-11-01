@@ -136,12 +136,12 @@ class Bt630Session(
             currentCoroutineContext().ensureActive()
             update(token) { pauseControls() }
             if (stable?.isCompleted == true) attempt = 0
-            if (!retryable || attempt >= 5) {
+            if (!retryable) {
                 update(token) { stateChanged(State.Failed(lastError ?: "Connection failed")) }
                 return
             }
             update(token) { stateChanged(State.Connecting(attempt + 1, lastError)) }
-            delay(when (attempt) { 0, 1 -> 1_000L; 2 -> 2_000L; else -> 4_000L })
+            delay(when (attempt) { 0, 1 -> 1_000L; 2 -> 2_000L; 3 -> 4_000L; else -> 5_000L })
         }
     }
 }

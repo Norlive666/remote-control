@@ -17,7 +17,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
 @Composable
-internal fun Bt630ConnectionDialog(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth: ()->Unit,onClose: ()->Unit) {
+internal fun Bt630ConnectionDialog(vm: RemoteViewModel,scan: ()->Unit,systemBluetooth: ()->Unit,connect: (DeviceRow)->Unit,cancel: ()->Unit,onClose: ()->Unit) {
     var help by remember { mutableStateOf(false) }
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
         BoxWithConstraints(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
@@ -46,7 +46,7 @@ internal fun Bt630ConnectionDialog(vm: RemoteViewModel,scan: ()->Unit,systemBlue
                                         Text(device.name,fontSize=13.sp,maxLines=1)
                                         Text(device.address,fontSize=11.sp,color=Muted,maxLines=1)
                                     }
-                                    OutlinedButton({vm.connect(device)},enabled=!vm.connecting && !vm.connected,
+                                    OutlinedButton({connect(device)},
                                         modifier=Modifier.testTag("bt630-connect-${device.address}")) { Text("连接") }
                                 }
                             }
@@ -56,7 +56,7 @@ internal fun Bt630ConnectionDialog(vm: RemoteViewModel,scan: ()->Unit,systemBlue
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
                         OutlinedButton({if(vm.scanning)vm.stopScan() else scan()},enabled=!vm.connected && !vm.connecting,
                             modifier=Modifier.testTag("bt630-scan")) { Text(if(vm.scanning)"停止搜索" else "搜索设备") }
-                        OutlinedButton({if(vm.connected || vm.connecting)vm.disconnect() else onClose()},modifier=Modifier.testTag("bt630-cancel")) {
+                        OutlinedButton({if(vm.connected || vm.connecting)cancel() else onClose()},modifier=Modifier.testTag("bt630-cancel")) {
                             Text(if(vm.connected)"断开" else "取消")
                         }
                         Spacer(Modifier.weight(1f))
