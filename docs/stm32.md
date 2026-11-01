@@ -1,5 +1,7 @@
 # STM32 接收端接入
 
+v4.0.0只保留一个初始化接口 `HAL_StatusTypeDef RC_Init(uint32_t baud)`。升级时同时替换`.c/.h`，原无参调用改为 `RC_Init(115200U)`；原指定波特率的调用改为 `RC_Init(原参数)`。删除两个旧别名及默认波特率宏，App和协议不变。
+
 v3.1.0仅保留H723＋BT630，删除其他芯片支持及遗留分支，现有初始化和接收行为不变。
 
 v3.0.0将`RC_State_t.sliders`扩展到4路，支持App v1.7.0的v2帧及旧App的v1帧。升级时同步替换同型号`.c/.h`并重新编译整个工程；UART/定时器/反相与初始化接口不变。新App不能配合旧驱动收包。
@@ -12,8 +14,8 @@ BT630 专项接线、手机连接、移植验证和故障排查见 [BT630 移植
 HAL_Init();
 SystemClock_Config();
 /* 有 CubeMX 外设初始化时，先完成 MX_DMA_Init()/MX_USARTx_UART_Init() 等调用。 */
-if (RC_Init() != HAL_OK) Error_Handler();       /* 使用头文件 RC_DEFAULT_BAUD，下载包默认115200 */
-/* 或 RC_InitBT630()：FSC-BT630，115200 bit/s。其他波特率用 RC_InitBaud(baud)。 */
+if (RC_Init(115200U) != HAL_OK) Error_Handler(); /* 参数单位bit/s */
+/* 原工程若使用经验证的120000参数，可改为RC_Init(120000U)。不要据此修改模块或其他板卡的参数。 */
 
 RC_State_t state;
 RC_GetState(&state); /* 在主循环或其他中断读取一致的快照 */
@@ -33,7 +35,7 @@ H723 的 PD8/PD9 AF7 定义见 [ST 数据手册](https://www.st.com/resource/en/
 ## 两文件、一行初始化
 
 1. 将对应型号的 `remote_control.c` 加入编译，将 `remote_control.h` 所在目录加入头文件搜索路径；在使用处 `#include "remote_control.h"`。
-2. 在 `HAL_Init()`、`SystemClock_Config()` 和全部 `MX_*_Init()` 之后、其他串口业务开始之前，加入 `if (RC_Init() != HAL_OK) Error_Handler();`，或者在业务程序中检查并处理返回状态。下载包默认 `RC_DEFAULT_BAUD 115200U`，BT630只调用 `RC_Init()` 即可；也兼容固定115200的 `RC_InitBT630()` 和 `RC_InitBaud(baud)`。模块实际为9600时可改头文件默认值，或调用 `RC_InitBaud(9600)`。
+2. 在 `HAL_Init()`、`SystemClock_Config()` 和全部 `MX_*_Init()` 之后、其他串口业务开始之前，加入 `if (RC_Init(115200U) != HAL_OK) Error_Handler();`，或者在业务程序中检查并处理返回状态。参数是UART波特率，不会自动检测或修改BT630配置。按实际模块和时钟选择参数；已有工程经实测使用120000时，可保留该参数写成 `RC_Init(120000U)`。
 3. 无需 `.ioc` 中配置 对应 GPIO/USART/定时器，无需 `uart.c`、`tim.c`，无需开启 HAL UART/TIM/GPIO/DMA 模块，无需编辑中断函数。工程保留基础 HAL/RCC（H723 包括 RCCEx）、芯片 CMSIS、启动文件、链接脚本和系统时钟。
 
 驱动直接配置 对应 GPIO/USART/定时器 寄存器，不调用生成的 MSP 回调。使用私有中断函数，复制当前向量表到对齐 RAM 后仅替换所选串口、定时器两项（H723 USART3/TIM5）；不导出所选外设的生成器常用 IRQ 或 HAL 句柄名称。因此原有 `uart.c`、`tim.c` 和 `stm32xx_it.c` 可以保留并一起编译，不需要合并同名中断函数；其他中断入口和优先级分组保持不变。RAM 向量表内容占 H723 716 字节，另有链接对齐开销。H723 在数据缓存开启时清理表缓存，切换 VTOR 前后使用屏障。
@@ -43,11 +45,10 @@ H723 的 PD8/PD9 AF7 定义见 [ST 数据手册](https://www.st.com/resource/en/
 H723 包的 `remote_control.h` 顶部集中提供：
 
 ```c
-#define RC_DEFAULT_BAUD 115200U /* RC_Init() 默认用于BT630。 */
 #define RC_RX_INVERT 1          /* 下载默认，匹配本机CN14/Q5；直接PD9时为0。 */
 ```
 
-这两项可直接编辑头文件，或通过对所有驱动编译单元生效的编译参数覆盖。在 `main.c` 的 `#include` 前单独定义宏，不会改变独立编译的驱动配置。`RC_InitBT630()` 始终使用115200，`RC_InitBaud(baud)` 使用参数值；两者同样遵循接收反相配置。
+反相配置可直接编辑头文件，或通过对所有驱动编译单元生效的编译参数覆盖。在 `main.c` 的 `#include` 前单独定义宏，不会改变独立编译的驱动配置。波特率只由 `RC_Init(baud)` 参数决定，不再提供头文件默认值。
 
 H723板卡的D-Bus接口若像本项目实测板一样，通过NPN管Q5再连接PD9，接口输入与芯片RX电平相反，使用下载包已默认设置的 `RC_RX_INVERT 1`。在该实测原理图中，BT630 TXD接CN14第3脚，GND接第1脚；供电按模块/转接板规格。若绕过Q5直接接PD9，应设为0。驱动不会自动猜测电路极性。
 

@@ -1,13 +1,13 @@
 # BT630 移植与排障指南
 
-更新日期：2026-11-01。以本仓库 STM32 驱动 `stm32-v3.1.0` 和 Android App `v1.9.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
+更新日期：2026-11-01。以本仓库 STM32 驱动 `stm32-v4.0.0` 和 Android App `v1.9.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
 
 本文说明怎样把 BT630 接到新的 STM32 HAL 工程，以及怎样区分手机连接、UART 接收、协议解析和业务控制问题。芯片通用说明见 [STM32 接入文档](stm32.md)，完整帧格式见 [协议文档](../protocol/README.md)。
 
 ## 1. 下载与通信链路
 
 - [Android APK v1.9.0](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)：Android 8.0 及以上。
-- [STM32 驱动包 v3.1.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.1.0/remote-control-stm32-v3.1.0.zip)：仅保留H723＋BT630的 `.c/.h`。
+- [STM32 驱动包 v4.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)：仅保留H723＋BT630的 `.c/.h`。
 - 仓库源码：[H723](../stm32/h723/)。
 
 ```text
@@ -74,8 +74,7 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 
 ```c
 /* 对应 stm32/h723/remote_control.h 中的配置。 */
-#define RC_DEFAULT_BAUD 115200U
-/* H723 经本板 Q5 为 1，普通直连为 0。 */
+#define RC_RX_INVERT 1 /* 经本板Q5为1，普通直连为0。 */
 ```
 
 也可通过编译器参数全局覆盖配置，但必须对 `remote_control.c` 的编译生效。只在 `main.c` 中定义宏，不能改变另一个编译单元的配置。
@@ -94,7 +93,7 @@ RC_State_t rc_state;
 在 `HAL_Init()`、系统时钟和已有全部 `MX_*_Init()` 完成之后，目标串口的其他业务启动之前，加入一次初始化：
 
 ```c
-g_rc_init_status = RC_Init();
+g_rc_init_status = RC_Init(115200U);
 if (g_rc_init_status != HAL_OK) {
     Error_Handler();
 }
@@ -105,7 +104,7 @@ if (g_rc_init_status != HAL_OK) {
 ```c
 RC_GetState(&rc_state);
 if (rc_state.link_valid && rc_state.enabled && !rc_state.stopped) {
-    /* 使用 rc_state.axes[0..3] 和 rc_state.sliders[0..1]。 */
+    /* 使用 rc_state.axes[0..3] 和 rc_state.sliders[0..3]。 */
 } else {
     /* 在此使业务输出回到自己的停止/中立状态。 */
 }
@@ -113,22 +112,24 @@ if (rc_state.link_valid && rc_state.enabled && !rc_state.stopped) {
 
 `g_rc` 是全局 `volatile RC_State_t`，可在调试器中直接观察；业务同时读取多个字段时使用 `RC_GetState()`，避免读取到更新了一半的数据。
 
-### 三个初始化接口的区别
+### 唯一初始化接口
 
-| 接口 | 含义 |
-| --- | --- |
-| `RC_Init()` | 使用头文件 `RC_DEFAULT_BAUD`，发布包默认 115200 |
-| `RC_InitBT630()` | 固定 115200，不接受参数 |
-| `RC_InitBaud(baud)` | 使用指定 UART 波特率，例如实际模块为 9600 时传 `9600` |
+```c
+HAL_StatusTypeDef RC_Init(uint32_t baud);
+```
 
-三者使用同一个初始化实现，并遵循同一反相配置。`RC_InitBaud()` 的单位是 bit/s，不是定时器分频、发送周期或连接超时。成功后重复同波特率初始化不重置状态，换波特率则返回 `HAL_BUSY`；`RC_Reset()` 也不会解除硬件占用或修改波特率。需要更换初始化参数时，修改配置后复位 MCU，检查本次返回值。
+参数是UART波特率，单位bit/s。标准115200配置调用 `RC_Init(115200U)`；已有工程若经实测采用120000参数，改写为 `RC_Init(120000U)` 保留原参数。它不是定时器分频、发送周期或连接超时，不会自动检测或修改模块波特率。
+
+v4.0.0移除旧的 `RC_InitBT630()`、`RC_InitBaud()` 和无参初始化形式，以及默认波特率宏。替换`.c/.h`后必须修改初始化调用，再重新编译；不要混用不同版本的头文件与源文件。
+
+成功后重复同波特率初始化不重置状态，换波特率则返回 `HAL_BUSY`；`RC_Reset()` 也不会解除硬件占用或修改波特率。需要更换初始化参数时，修改调用后复位MCU，检查本次返回值。
 
 ### `.ioc` 和原有文件怎样处理
 
 | 工程现状 | 处理方法 |
 | --- | --- |
 | `.ioc` 没配置目标 UART/GPIO/定时器 | 无需增加配置；本驱动直接配置固定外设寄存器 |
-| 目标 UART 已经 `MX_USARTx_UART_Init()`，但尚未启用收发业务 | 保留文件和初始化；随后调用 `RC_Init()`，驱动重新设置 UART 参数 |
+| 目标 UART 已经 `MX_USARTx_UART_Init()`，但尚未启用收发业务 | 保留文件和初始化；随后调用 `RC_Init(baud)`，驱动重新设置 UART 参数 |
 | 目标 UART 正在供 D-Bus、日志、DMA、中断等业务使用 | 不能并用；先决定串口归属，再停止/移除对这一外设的原业务，或另行移植到空闲外设 |
 | TIM5（H723）已配置或使用 | 即使尚未启动，驱动也可能返回 `HAL_BUSY`；当前实现不接管已启用时钟/中断的目标定时器 |
 
@@ -221,7 +222,7 @@ BT630 模式按名义 50 Hz 计算约 1000 字节/秒；115200、8N1 的 UART �
 
 这次其他设备移植的反馈先提到 `rc_initbt630(12000)`，随后更正为“似乎把分频之类的值改为 2000，具体代码已没有”。未拿到当时的函数、寄存器、时钟树或波形，因此本记录仅保留现象，**不将 12000 或 2000 作为移植配置建议，也不认定已找到原因**。
 
-本仓库接口是 `RC_InitBT630(void)`，不接受参数；自定义波特率应调用 `RC_InitBaud(baud)`。如果其他工程出现不同签名，需先核对其文件版本或封装。H723 下载包继续保留 115200 和本板接收反相配置。
+当前v4.0.0接口是 `RC_Init(uint32_t baud)`，参数为UART波特率；不要与旧版接口或其他工程封装混淆。示例通常使用 `RC_Init(115200U)`，接收反相仍按实际接线配置。
 
 ### UART 分频影响采样
 
@@ -271,7 +272,7 @@ T_update = (PSC + 1) × (ARR + 1) / f_TIM
 BT630 固件 AT+VER 返回 / UART 实际参数：
 STM32 完整型号 / 工程时钟源与频率：
 模块 TXD 实际接点 / 有无反相电路 / 是否共地：
-驱动版本 / RC_DEFAULT_BAUD / RC_RX_INVERT / Init 返回值：
+驱动版本 / RC_Init传入的波特率 / RC_RX_INVERT / Init 返回值：
 valid_frames / crc_errors / link_valid / enabled / stopped：
 故障出现时机 / App 完整错误 / 同条件调试器连续发送结果：
 若改过分频：改动文件、符号及改前改后数值：

@@ -168,7 +168,7 @@ static void install_vectors(void) {
     SCB->VTOR=(uint32_t)(uintptr_t)vectors;
     __DSB(); __ISB();
 }
-HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
+HAL_StatusTypeDef RC_Init(uint32_t baud) {
     uint32_t clock, uart_clock, divisor, period, brr, key;
     HAL_StatusTypeDef result;
     if (baud==0) return HAL_ERROR;
@@ -212,8 +212,6 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     unlock(key);
     return HAL_OK;
 }
-HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(RC_DEFAULT_BAUD); }
-HAL_StatusTypeDef RC_InitBT630(void) { return RC_InitBaud(115200); }
 static void uart_irq(void) {
     uint32_t isr=USART3->ISR;
     if (isr & USART_ISR_RXNE_RXFNE) {

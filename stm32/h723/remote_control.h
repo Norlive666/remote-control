@@ -9,9 +9,6 @@ typedef int HAL_StatusTypeDef;
 #define RC_H723 1
 
 /* Project settings: edit here or override for every driver compilation. */
-#ifndef RC_DEFAULT_BAUD
-#define RC_DEFAULT_BAUD 115200U
-#endif
 #ifndef RC_RX_INVERT
 #define RC_RX_INVERT 1 /* 1 for CN14/Q5 D-Bus input; 0 for direct PD9. */
 #endif
@@ -31,15 +28,14 @@ typedef struct {
 } RC_State_t;
 extern volatile RC_State_t g_rc;
 /* Call after all MX init calls, before starting other UART business.
+ * baud is the explicit UART rate in bit/s; e.g. 115200U. No auto-detection.
  * Owns USART3 PD8(TX)/PD9(RX) and TIM5; idle generated UART init is allowed.
  * HAL_BUSY: UART DMA/IRQ/transmit active, or timer occupied; no state changed.
  * Do not use this UART concurrently with HAL or another protocol after Init.
  * Same-baud repeated Init is a no-op; different baud returns HAL_BUSY.
  * UART/TIM HAL modules and generated peripheral/IRQ files are not required.
  * After Init/Reset or timeout, the first valid frame may enable control directly. */
-HAL_StatusTypeDef RC_Init(void);
-HAL_StatusTypeDef RC_InitBT630(void);
-HAL_StatusTypeDef RC_InitBaud(uint32_t baud);
+HAL_StatusTypeDef RC_Init(uint32_t baud);
 void RC_GetState(RC_State_t *out);
 void RC_Reset(void);
 void RC_ProcessByte(uint8_t byte);

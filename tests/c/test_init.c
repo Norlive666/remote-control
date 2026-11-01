@@ -49,7 +49,7 @@ static void unchanged(uint32_t vtor) {
 static void uart_busy(uint32_t original) {
     uint32_t cr1=TEST_UART->CR1, cr2=TEST_UART->CR2, cr3=TEST_UART->CR3;
     uint32_t irq=test_enabled[TEST_UART_IRQn];
-    assert(RC_Init()==HAL_BUSY); unchanged(original);
+    assert(RC_Init(115200U)==HAL_BUSY); unchanged(original);
     assert(TEST_UART->CR1==cr1 && TEST_UART->CR2==cr2 && TEST_UART->CR3==cr3);
     assert(test_enabled[TEST_UART_IRQn]==irq && TEST_UART_ENR==TEST_UART_EN);
 }
@@ -98,42 +98,46 @@ int main(int argc, char **argv) {
         uart_busy(original);
     } else if (!strcmp(argv[1],"busy-timer")) {
         RCC->APB1LENR=RCC_APB1LENR_TIM5EN;
-        assert(RC_Init()==HAL_BUSY); unchanged(original);
+        assert(RC_Init(115200U)==HAL_BUSY); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"busy-uart-irq")) {
         test_enabled[TEST_UART_IRQn]=1;
-        assert(RC_Init()==HAL_BUSY); unchanged(original);
+        assert(RC_Init(115200U)==HAL_BUSY); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"busy-irq")) {
         test_enabled[TEST_TIMER_IRQn]=1;
-        assert(RC_Init()==HAL_BUSY); unchanged(original);
+        assert(RC_Init(115200U)==HAL_BUSY); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"invalid-baud")) {
-        assert(RC_InitBaud(0)==HAL_ERROR); unchanged(original);
-        assert(RC_InitBaud(UINT32_MAX)==HAL_ERROR); unchanged(original);
-        assert(RC_InitBaud(1)==HAL_ERROR); unchanged(original);
+        assert(RC_Init(0)==HAL_ERROR); unchanged(original);
+        assert(RC_Init(UINT32_MAX)==HAL_ERROR); unchanged(original);
+        assert(RC_Init(1)==HAL_ERROR); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"invalid-clock")) {
         pclk1=0;
-        assert(RC_Init()==HAL_ERROR); unchanged(original);
+        assert(RC_Init(115200U)==HAL_ERROR); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"invalid-uart-clock")) {
         RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_HSI; /* Not ready. */
-        assert(RC_Init()==HAL_ERROR); unchanged(original);
+        assert(RC_Init(115200U)==HAL_ERROR); unchanged(original);
         assert(RCC->APB2ENR==0);
     } else if (!strcmp(argv[1],"pll2-off") || !strcmp(argv[1],"pll2-no-q")) {
         RCC->D2CCIP2R=RCC_USART234578CLKSOURCE_PLL2;
         RCC->CR=strcmp(argv[1],"pll2-off") ? RCC_CR_PLL2RDY : 0;
         RCC->PLLCFGR=strcmp(argv[1],"pll2-no-q") ? RCC_PLLCFGR_DIVQ2EN : 0;
-        assert(RC_Init()==HAL_ERROR); unchanged(original);
+        assert(RC_Init(115200U)==HAL_ERROR); unchanged(original);
         assert(RCC->APB1LENR==0);
-    } else if (!strcmp(argv[1],"default-baud")) {
-        assert(RC_Init()==HAL_OK);
-#if RC_DEFAULT_BAUD == 9600U
-        assert(TEST_UART->BRR==3750); /* 36 MHz / 9600. */
-#else
+    } else if (!strcmp(argv[1],"baud-115200")) {
+        assert(RC_Init(115200U)==HAL_OK);
         assert(TEST_UART->BRR==313); /* 36 MHz / 115200, rounded. */
-#endif
+    } else if (!strcmp(argv[1],"baud-120000")) {
+        pclk1=120000000;
+        assert(RC_Init(120000U)==HAL_OK);
+        assert(TEST_UART->BRR==1000);
+        assert(TEST_TIMER->PSC==239 && TEST_TIMER->ARR==999);
+        g_rc.valid_frames=77;
+        assert(RC_Init(120000U)==HAL_OK && g_rc.valid_frames==77);
+        assert(RC_Init(115200U)==HAL_BUSY && g_rc.valid_frames==77);
     } else {
         uint32_t expected_primask=strcmp(argv[1],"unmasked") ? 1u : 0u;
         test_primask=expected_primask;
@@ -185,7 +189,7 @@ int main(int argc, char **argv) {
         }
         TEST_GPIO->ODR=0xffff;
         TEST_GPIO->MODER=TEST_GPIO->PUPDR=TEST_GPIO->AFR[1]=0xffffffff;
-        assert((bt630?RC_InitBT630():RC_InitBaud(baud))==HAL_OK);
+        assert(RC_Init(baud)==HAL_OK);
         assert(test_primask==expected_primask && g_rc.valid_frames==0 && !g_rc.link_valid);
         assert(SCB->VTOR!=original);
         uint32_t *installed=(uint32_t *)(uintptr_t)SCB->VTOR;
@@ -215,8 +219,8 @@ int main(int argc, char **argv) {
         assert(TEST_TIMER->PSC==expected_psc && TEST_TIMER->ARR==999 && (TEST_TIMER->CR1 & TIM_CR1_CEN));
         assert(test_enabled[TEST_UART_IRQn] && test_enabled[TEST_TIMER_IRQn]);
         g_rc.valid_frames=77;
-        assert(RC_InitBaud(baud)==HAL_OK && g_rc.valid_frames==77);
-        assert(RC_InitBaud(bt630?9600:115200)==HAL_BUSY && g_rc.valid_frames==77);
+        assert(RC_Init(baud)==HAL_OK && g_rc.valid_frames==77);
+        assert(RC_Init(bt630?9600:115200)==HAL_BUSY && g_rc.valid_frames==77);
         /* Hand-checked CRC frame: disabled baseline then enabled axes. */
         const uint8_t disabled[20]={0xa5,0x5a,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x2e,0xc2};
         for (unsigned i=0;i<20;i++) byte(disabled[i]);

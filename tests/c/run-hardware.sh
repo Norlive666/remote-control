@@ -9,14 +9,9 @@ cc -std=c11 -Wall -Wextra -Werror -fno-pie -no-pie -DSTM32H723xx \
    -I"$repo_dir/tests/c/hardware" -I"$repo_dir/stm32/h723" \
    -I"$cube/Drivers/CMSIS/Device/ST/STM32H7xx/Include" \
    "$repo_dir/tests/c/test_init.c" "$repo_dir/stm32/h723/remote_control.c" -o "$tmp_dir/h723"
-for case in busy-uart busy-dma-rx busy-dma-tx busy-rx-ie busy-tc-ie busy-parity-ie busy-txe-ie busy-lin-ie busy-error-ie busy-cts-ie busy-tx-hardware busy-timer busy-irq busy-uart-irq invalid-baud invalid-clock invalid-uart-clock normal bt630 cache unmasked apb1 reuse-uart reuse-uart-irq default-baud old-peripherals timpre4 timpre8 hsi-div4 csi pll2 pll3 lse pll2-off pll2-no-q busy-rto-ie busy-fifo-ie; do
+for case in busy-uart busy-dma-rx busy-dma-tx busy-rx-ie busy-tc-ie busy-parity-ie busy-txe-ie busy-lin-ie busy-error-ie busy-cts-ie busy-tx-hardware busy-timer busy-irq busy-uart-irq invalid-baud invalid-clock invalid-uart-clock normal bt630 cache unmasked apb1 reuse-uart reuse-uart-irq baud-115200 baud-120000 old-peripherals timpre4 timpre8 hsi-div4 csi pll2 pll3 lse pll2-off pll2-no-q busy-rto-ie busy-fifo-ie; do
     "$tmp_dir/h723" "$case"
 done
-cc -std=c11 -Wall -Wextra -Werror -fno-pie -no-pie -DSTM32H723xx -DRC_DEFAULT_BAUD=9600U \
-   -I"$repo_dir/tests/c/hardware" -I"$repo_dir/stm32/h723" \
-   -I"$cube/Drivers/CMSIS/Device/ST/STM32H7xx/Include" \
-   "$repo_dir/tests/c/test_init.c" "$repo_dir/stm32/h723/remote_control.c" -o "$tmp_dir/h723-baud"
-"$tmp_dir/h723-baud" default-baud
 cc -std=c11 -Wall -Wextra -Werror -fno-pie -no-pie -DSTM32H723xx -DRC_RX_INVERT=0 \
    -I"$repo_dir/tests/c/hardware" -I"$repo_dir/stm32/h723" \
    -I"$cube/Drivers/CMSIS/Device/ST/STM32H7xx/Include" \
