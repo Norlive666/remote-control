@@ -8,7 +8,7 @@
 
 安装 APK：[v1.9.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-当前驱动仅保留H723＋BT630，初始化方式不变。驱动源码包：[H723＋BT630 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)。
+当前驱动仅保留H723＋BT630；v4.0.0统一为带波特率参数的 `RC_Init(baud)`，升级时需同步修改调用。驱动源码包：[H723＋BT630 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)。
 
 BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移植与排障指南](docs/bt630-porting.md)，包含 `BLE 写入失败 -5` 与 UART/定时器分频的区别。
 

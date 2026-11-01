@@ -70,7 +70,7 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 
 1. 将 `stm32/h723/` 的 `remote_control.c`、`remote_control.h` 复制到工程；把 `.c` 加入构建、头文件目录加入搜索路径。
 2. 工程提供正确的芯片 HAL、CMSIS、启动文件、链接脚本、`HAL_Init()` 和 `SystemClock_Config()`；H723 需要基础 RCC/RCCEx 支持。
-3. 按接线设置头文件。默认波特率为 115200；H723 直连 PD9 时务必将反相设为 0。
+3. 按接线设置头文件中的接收反相；H723 直连 PD9 时设为0。波特率通过 `RC_Init(baud)` 显式传入，标准115200配置使用 `RC_Init(115200U)`。
 
 ```c
 /* 对应 stm32/h723/remote_control.h 中的配置。 */
