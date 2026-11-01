@@ -1,6 +1,5 @@
 #ifndef TEST_HAL_H
 #define TEST_HAL_H
-#ifdef STM32H723xx
 #include "stm32h723xx.h"
 #define RCC_HCLK_DIV1 0u
 #define RCC_HCLK_DIV2 1u
@@ -26,21 +25,8 @@ void HAL_RCCEx_GetPLL3ClockFreq(PLL3_ClocksTypeDef *clocks);
 #define __HAL_RCC_USART3_CLK_ENABLE() (RCC->APB1LENR |= RCC_APB1LENR_USART3EN)
 #define __HAL_RCC_TIM5_CLK_ENABLE() (RCC->APB1LENR |= RCC_APB1LENR_TIM5EN)
 #define __HAL_RCC_GPIOA_CLK_ENABLE() (RCC->AHB4ENR |= RCC_AHB4ENR_GPIOAEN)
-#else
-#include "stm32f103xb.h"
-#define RCC_HCLK_DIV1 0u
-#define RCC_HCLK_DIV2 1u
-#define RCC_HCLK_DIV4 2u
-#define RCC_HCLK_DIV8 3u
-#define __HAL_RCC_GPIOA_CLK_ENABLE() (RCC->APB2ENR |= RCC_APB2ENR_IOPAEN)
-#define __HAL_RCC_AFIO_CLK_ENABLE() (RCC->APB2ENR |= RCC_APB2ENR_AFIOEN)
-#endif
 #define __HAL_RCC_USART1_CLK_ENABLE() (RCC->APB2ENR |= RCC_APB2ENR_USART1EN)
-#define __HAL_RCC_TIM4_CLK_ENABLE() (RCC->APB1ENR |= RCC_APB1ENR_TIM4EN)
-#ifdef STM32H723xx
-#undef __HAL_RCC_TIM4_CLK_ENABLE
 #define __HAL_RCC_TIM4_CLK_ENABLE() (RCC->APB1LENR |= RCC_APB1LENR_TIM4EN)
-#endif
 #define CLEAR_BIT(reg, bit) ((reg) &= ~(bit))
 #define SET_BIT(reg, bit) ((reg) |= (bit))
 #define READ_BIT(reg, bit) ((reg) & (bit))

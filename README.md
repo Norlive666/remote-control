@@ -1,6 +1,6 @@
 # Remote Control / 蓝牙遥控面板
 
-横屏 Android 遥控 App：浅色圆角卡片布局、双摇杆、默认双滑块，可在设置中添加带备注的按键和滑块，支持四路 slider 输出，可拖动编辑位置与大小，使用 **飞易通 FSC-BT630 BLE** 连接和 20 字节控制协议，支持失败重试与意外断线重连。STM32 提供 H723VGT6、F103C8T6 的独立 `.c/.h` 接收驱动。
+横屏 Android 遥控 App：浅色圆角卡片布局、双摇杆、默认双滑块，可在设置中添加带备注的按键和滑块，支持四路 slider 输出，可拖动编辑位置与大小，使用 **飞易通 FSC-BT630 BLE** 连接和 20 字节控制协议，支持失败重试与意外断线重连。STM32 仅提供 H723VGT6 的独立 `.c/.h` 接收驱动。
 
 ![实际界面](docs/controller.png)
 
@@ -8,11 +8,11 @@
 
 安装 APK：[v1.9.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
 
-驱动源码包：[H723 / F103 两套 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.0.0/remote-control-stm32-v3.0.0.zip)。
+当前驱动仅保留H723＋BT630，初始化方式不变。驱动源码包：[H723＋BT630 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.1.0/remote-control-stm32-v3.1.0.zip)。
 
 BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移植与排障指南](docs/bt630-porting.md)，包含 `BLE 写入失败 -5` 与 UART/定时器分频的区别。
 
-1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入对应芯片的两个源文件。
+1. 按 [STM32 接入说明](docs/stm32.md) 接线和加入H723的两个源文件。
 2. 模块应运行 UART 透传固件，UART 为 115200、8N1；STM32 调用 `RC_Init()`（默认115200；也兼容 `RC_InitBT630()`）。检查 H723 接收反相是否与实际接线一致。
 3. 首次点击面板的 FSC-BT630 打开连接窗口，扫描并选择设备。连接成功后记住设备名称和地址；以后短按直接连接，已连接时短按断开，等待中短按取消，长按打开列表重选。仅支持 FFF0 服务、FFF2 写入、FFF1 通知，无需先在系统中配对；旧版连接模式设置不再影响连接。窗口只常驻显示状态和设备列表，权限、UUID、扫描详情与错误诊断收进“帮助”。
 4. 蓝牙连接成功后手动开启「使能」。松开摇杆自动归中；滑块保留位置。
@@ -69,7 +69,7 @@ BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移�
 
 ## STM32 最少接入
 
-以 HAL 工程为前提，加入对应芯片的 `remote_control.c` 和 `remote_control.h`：
+以 H723 HAL 工程为前提，加入 `remote_control.c` 和 `remote_control.h`：
 
 ```c
 HAL_Init();
@@ -85,18 +85,18 @@ if (state.link_valid && state.enabled && !state.stopped) {
 }
 ```
 
-H723：USART3，PD8 TX → 模块 RX、PD9 RX ← 模块 TX，TIM5。F103：USART1，PA9 TX → 模块 RX、PA10 RX ← 模块 TX，TIM4。两端共地，UART 电平3.3V，模块供电按模块规格。驱动自动初始化对应GPIO、USART、定时器和NVIC，无需CubeMX配置或生成uart.c/tim.c，无需UART/TIM HAL模块。基础HAL/RCC（H723包括RCCEx）、启动文件和系统时钟仍由原工程提供。
+H723：USART3，PD8 TX → 模块 RX、PD9 RX ← 模块 TX，TIM5。两端共地，UART 电平3.3V，模块供电按模块规格。驱动自动初始化对应GPIO、USART、定时器和NVIC，无需CubeMX配置或生成uart.c/tim.c，无需UART/TIM HAL模块。基础HAL/RCC（H723包括RCCEx）、启动文件和系统时钟仍由原工程提供。
 
-v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。当前下载包的 `RC_DEFAULT_BAUD` 默认115200；H723的 `RC_RX_INVERT` 默认1，与本机实测D-Bus接口配置一致，直接连接PD9时改为0。F103默认115200、不反相，不支持硬件反相。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
+v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。当前下载包的 `RC_DEFAULT_BAUD` 默认115200；H723的 `RC_RX_INVERT` 默认1，与本机实测D-Bus接口配置一致，直接连接PD9时改为0。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
 
 ## 协议和构建
 
 - [20 字节协议、CRC 与示例帧](protocol/README.md)
 - [验证记录与实测边界](docs/validation.md)
-- 主机测试：`tests/c/run.sh`，覆盖两套驱动的拆包、连包、坏 CRC、序号、超时和恢复。
+- 主机测试：`tests/c/run.sh`，覆盖H723驱动的拆包、连包、坏 CRC、序号、超时和恢复。
 - 目标编译：`tools/compile-stm32.sh`，按脚本要求提供匹配的 STM32Cube 固件目录。
 - Android：JDK 17、Android SDK 35，进入 `android/` 执行 `./gradlew testDebugUnitTest assembleRelease`。默认生成未签名 release APK；正式 APK 使用仓库外固定密钥签名。
-- GitHub Actions 自动执行 Android 单元测试、APK 编译、C 测试、两种 MCU 的源文件交叉编译和模拟器界面测试。
+- GitHub Actions 自动执行 Android 单元测试、APK 编译、C 测试、H723 的源文件交叉编译和模拟器界面测试。
 
 源码、自动测试与编译检查不能代替开发板运行验证。发布记录会单独列出是否做过手机、模块与开发板的实际通信测试。
 

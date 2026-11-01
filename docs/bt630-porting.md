@@ -1,14 +1,14 @@
 # BT630 移植与排障指南
 
-更新日期：2026-11-01。以本仓库 STM32 驱动 `stm32-v3.0.0` 和 Android App `v1.9.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
+更新日期：2026-11-01。以本仓库 STM32 驱动 `stm32-v3.1.0` 和 Android App `v1.9.0` 为基准；下文函数名、默认参数和行为均对应这两个版本。第 7 节另行解释旧版 `-5` 错误。
 
 本文说明怎样把 BT630 接到新的 STM32 HAL 工程，以及怎样区分手机连接、UART 接收、协议解析和业务控制问题。芯片通用说明见 [STM32 接入文档](stm32.md)，完整帧格式见 [协议文档](../protocol/README.md)。
 
 ## 1. 下载与通信链路
 
 - [Android APK v1.9.0](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)：Android 8.0 及以上。
-- [STM32 驱动包 v3.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.0.0/remote-control-stm32-v3.0.0.zip)：H723、F103 两套独立的 `.c/.h`。
-- 仓库源码：[H723](../stm32/h723/)、[F103](../stm32/f103/)。一次只加入与芯片匹配的一套。
+- [STM32 驱动包 v3.1.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v3.1.0/remote-control-stm32-v3.1.0.zip)：仅保留H723＋BT630的 `.c/.h`。
+- 仓库源码：[H723](../stm32/h723/)。
 
 ```text
 手机 App → BLE GATT 写入 FFF2 → BT630 → UART TXD → STM32 RX
@@ -52,7 +52,6 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 | 驱动目录 / 芯片 | MCU 接收：模块 TXD → | MCU 发送：→ 模块 RXD | 占用定时器 | 发布包接收极性 |
 | --- | --- | --- | --- | --- |
 | `stm32/h723/`，STM32H723VGT6 | PD9，USART3 RX，AF7 | PD8，USART3 TX，AF7 | TIM5 | `RC_RX_INVERT=1` |
-| `stm32/f103/`，STM32F103C8T6 | PA10，USART1 RX | PA9，USART1 TX | TIM4 | `RC_RX_INVERT=0` |
 
 两端必须共地。UART 使用兼容的 3.3V 逻辑，供电按裸模块或转接板的实际规格。仅接收手机控制数据时，模块 TXD → MCU RX 和共地是必要信号连接；本驱动不主动通过 MCU TX 回传确认。要从 MCU 向模块发 AT 命令，则还需发送通路和相应程序。
 
@@ -65,20 +64,18 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 
 该实测板 CN14 第 1 脚为 GND；其他板卡必须对照自己的原理图。普通 UART 在模块 TXD 处空闲为高，经本板 Q5 后 PD9 空闲为低。万用表只能辅助看静态电平，不能判断字节、波特率和帧格式；这些需要示波器或逻辑分析仪。
 
-F103 这套驱动不支持硬件接收反相，非零 `RC_RX_INVERT` 会编译报错；应使用普通 UART 信号路径，或在硬件上恢复正确极性。
-
 ## 4. 在新 HAL 工程中接入
 
 ### 加入文件和配置
 
-1. 将对应芯片目录的 `remote_control.c`、`remote_control.h` 复制到工程；把 `.c` 加入构建、头文件目录加入搜索路径。
+1. 将 `stm32/h723/` 的 `remote_control.c`、`remote_control.h` 复制到工程；把 `.c` 加入构建、头文件目录加入搜索路径。
 2. 工程提供正确的芯片 HAL、CMSIS、启动文件、链接脚本、`HAL_Init()` 和 `SystemClock_Config()`；H723 需要基础 RCC/RCCEx 支持。
 3. 按接线设置头文件。默认波特率为 115200；H723 直连 PD9 时务必将反相设为 0。
 
 ```c
-/* 对应 remote_control.h 中的配置；不要复制两个芯片包一起编译。 */
+/* 对应 stm32/h723/remote_control.h 中的配置。 */
 #define RC_DEFAULT_BAUD 115200U
-/* H723 经本板 Q5 为 1，普通直连为 0；F103 只能为 0。 */
+/* H723 经本板 Q5 为 1，普通直连为 0。 */
 ```
 
 也可通过编译器参数全局覆盖配置，但必须对 `remote_control.c` 的编译生效。只在 `main.c` 中定义宏，不能改变另一个编译单元的配置。
@@ -133,7 +130,7 @@ if (rc_state.link_valid && rc_state.enabled && !rc_state.stopped) {
 | `.ioc` 没配置目标 UART/GPIO/定时器 | 无需增加配置；本驱动直接配置固定外设寄存器 |
 | 目标 UART 已经 `MX_USARTx_UART_Init()`，但尚未启用收发业务 | 保留文件和初始化；随后调用 `RC_Init()`，驱动重新设置 UART 参数 |
 | 目标 UART 正在供 D-Bus、日志、DMA、中断等业务使用 | 不能并用；先决定串口归属，再停止/移除对这一外设的原业务，或另行移植到空闲外设 |
-| TIM5（H723）或 TIM4（F103）已配置或使用 | 即使尚未启动，驱动也可能返回 `HAL_BUSY`；当前实现不接管已启用时钟/中断的目标定时器 |
+| TIM5（H723）已配置或使用 | 即使尚未启动，驱动也可能返回 `HAL_BUSY`；当前实现不接管已启用时钟/中断的目标定时器 |
 
 不需要删除 `usart.c`、`tim.c` 或修改生成的 IRQ 函数。本驱动在对齐 RAM 中复制当前向量表，只替换目标 UART 和定时器入口；成功后独占这些外设，不能继续用原 HAL 句柄操作它们，也不能稍后再次初始化或改写这些时钟、引脚和向量表。
 
@@ -144,7 +141,7 @@ if (rc_state.link_valid && rc_state.enabled && !rc_state.stopped) {
 | 返回值 | 主要检查项 |
 | --- | --- |
 | `HAL_OK` | 外设初始化成功；仍需验证 UART 信号与有效帧 |
-| `HAL_BUSY` | UART DMA/中断/未完成发送、目标定时器占用、F103 USART1 重映射，或已初始化后尝试换波特率 |
+| `HAL_BUSY` | UART DMA/中断/未完成发送、目标定时器占用，或已初始化后尝试换波特率 |
 | `HAL_ERROR` | 波特率为零，或实际时钟不能得到本驱动支持的 UART/定时器分频 |
 
 忙和参数错误路径保留原状态；详见 [完整占用规则](stm32.md#占用与返回状态)。
@@ -178,7 +175,7 @@ A5 5A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 2E C2
 
 蓝牙调试器须按 HEX 发送这 20 个二进制字节，不能发送字符串 `"A5 5A ..."`。同一序号反复发送只有首次可能计入有效帧；持续验证需要递增序号并重新计算 CRC。完整 CRC 参数、序号规则、保留位和范围限制见 [协议文档](../protocol/README.md)。
 
-调试时可以在私有 `uart_irq()` / `RC_ProcessByte()` 中观察局部字节或内存；`rx` 是静态内部缓冲，不是公开 API。频繁停断点会引发 UART 溢出并干扰超时。不要在循环刷新的监视窗口读取 `RDR`（H723）或 `DR`（F103），读取数据寄存器会消耗待接收字节。
+调试时可以在私有 `uart_irq()` / `RC_ProcessByte()` 中观察局部字节或内存；`rx` 是静态内部缓冲，不是公开 API。频繁停断点会引发 UART 溢出并干扰超时。不要在循环刷新的监视窗口读取 `RDR`（H723），读取数据寄存器会消耗待接收字节。
 
 ## 6. 按故障层次排查
 
@@ -228,14 +225,14 @@ BT630 模式按名义 50 Hz 计算约 1000 字节/秒；115200、8N1 的 UART �
 
 ### UART 分频影响采样
 
-本驱动采用 16 倍过采样，H723 的 `PRESC=0`（不预分频）。两套实现写入的 BRR 数值可近似理解为：
+本驱动采用 16 倍过采样，H723 的 `PRESC=0`（不预分频）。H723 驱动写入的 BRR 数值可近似理解为：
 
 ```text
 BRR = round(软件计算的 UART 时钟 / 指定波特率)
 实际波特率 ≈ 硬件实际 UART 时钟 / BRR
 ```
 
-H723 USART3 的时钟由自己的内核时钟选择决定，不能直接拿 CPU 主频代替；F103 本驱动 USART1 使用 PCLK2。若实际振荡源、`HSE_VALUE`、PLL/分频或所取的 USART 时钟与软件计算不一致，修改波特率参数有可能偶然补偿错误比例。应修正时钟认知，再恢复与模块一致的目标波特率。[ST H723 参考手册 RM0468，USART 与 RCC 章节](https://www.st.com/resource/en/reference_manual/dm00603761.pdf)
+H723 USART3 的时钟由自己的内核时钟选择决定，不能直接拿 CPU 主频代替。若实际振荡源、`HSE_VALUE`、PLL/分频或所取的 USART 时钟与软件计算不一致，修改波特率参数有可能偶然补偿错误比例。应修正时钟认知，再恢复与模块一致的目标波特率。[ST H723 参考手册 RM0468，USART 与 RCC 章节](https://www.st.com/resource/en/reference_manual/dm00603761.pdf)
 
 例如仅在 UART 内核实际为 120 MHz 且配置如上时，115200 对应 BRR 约 1042；相同条件下 BRR=2000 则约为 60000 bit/s。这个示例不是所有开发板的应填数值。`BRR` 是分频编码，不能套用定时器的 `PSC+1` 规则。
 
@@ -259,7 +256,7 @@ T_update = (PSC + 1) × (ARR + 1) / f_TIM
 
 当前两文件驱动只针对表中两款芯片和固定 UART/定时器/引脚，没有运行时选择外设的 API。更换芯片、USART 或引脚不能仅修改一个名称；需要逐项核对时钟源及门控、GPIO 复用、寄存器布局、错误清除方式、IRQ 编号、向量表尺寸/对齐、缓存处理和定时器频率，再编译及实测。
 
-不能直接把普通 USART 的 BRR 公式用于 LPUART，或把 H723 的反相设置用于 F103。库版本、编译器中的芯片宏与实际芯片也要一致。自定义时钟后应验证 UART 位宽和定时周期，而不只检查 `HAL_OK`。
+不能直接把普通 USART 的 BRR 公式用于 LPUART。库版本、编译器中的芯片宏与实际芯片也要一致。自定义时钟后应验证 UART 位宽和定时周期，而不只检查 `HAL_OK`。
 
 ## 10. 验证范围与故障记录
 

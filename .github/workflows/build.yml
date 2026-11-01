@@ -48,12 +48,10 @@ jobs:
       - name: Driver initialization and private interrupts
         env:
           STM32_H7_CUBE_DIR: ${{ runner.temp }}/stm32-deps/H7
-          STM32_F1_CUBE_DIR: ${{ runner.temp }}/stm32-deps/F1
         run: tests/c/run-hardware.sh
-      - name: Compile and link both MCU drivers
+      - name: Compile and link H723 driver
         env:
           STM32_H7_CUBE_DIR: ${{ runner.temp }}/stm32-deps/H7
-          STM32_F1_CUBE_DIR: ${{ runner.temp }}/stm32-deps/F1
         run: tools/compile-stm32.sh
   ui:
     runs-on: ubuntu-24.04

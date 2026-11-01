@@ -100,13 +100,8 @@ void RC_ProcessByte(uint8_t byte) {
 }
 
 #ifndef RC_HOST_TEST
-#ifdef RC_H723
 #define RC_VECTOR_COUNT (16u + (unsigned)TIM24_IRQn + 1u)
 static uint32_t vectors[RC_VECTOR_COUNT] __ALIGNED(1024);
-#else
-#define RC_VECTOR_COUNT (16u + (unsigned)USBWakeUp_IRQn + 1u)
-static uint32_t vectors[RC_VECTOR_COUNT] __ALIGNED(256);
-#endif
 static uint32_t initialized_baud;
 static void uart_irq(void);
 static void timer_irq(void);
@@ -143,14 +138,10 @@ static uint32_t timer_clock(void) {
     uint32_t latency, pclk;
     HAL_RCC_GetClockConfig(&cfg,&latency);
     pclk=HAL_RCC_GetPCLK1Freq();
-#ifdef RC_H723
     if ((RCC->CFGR & RCC_CFGR_TIMPRE)==0) return pclk * (cfg.APB1CLKDivider==RCC_HCLK_DIV1 ? 1u : 2u);
     if (cfg.APB1CLKDivider==RCC_HCLK_DIV1) return pclk;
     if (cfg.APB1CLKDivider==RCC_HCLK_DIV2) return pclk*2u;
     return pclk*4u;
-#else
-    return pclk * (cfg.APB1CLKDivider==RCC_HCLK_DIV1 ? 1u : 2u);
-#endif
 }
 static int occupied(void) {
     if (RCC->APB1LENR & RCC_APB1LENR_USART3EN) {
@@ -163,13 +154,7 @@ static int occupied(void) {
         if ((USART3->CR1 & (USART_CR1_UE|USART_CR1_TE))==(USART_CR1_UE|USART_CR1_TE) &&
             !(USART3->ISR & USART_ISR_TC)) return 1;
     } else if (NVIC_GetEnableIRQ(USART3_IRQn)) return 1;
-#ifdef RC_H723
     if (RCC->APB1LENR & RCC_APB1LENR_TIM5EN) return 1;
-#else
-    if (RCC->APB1ENR & RCC_APB1ENR_TIM4EN) return 1;
-    /* A remapped USART3 cannot use PA9/PA10 without changing shared AFIO state. */
-    if ((RCC->APB2ENR & RCC_APB2ENR_AFIOEN) && (AFIO->MAPR & AFIO_MAPR_USART1_REMAP)) return 1;
-#endif
     return NVIC_GetEnableIRQ(TIM5_IRQn);
 }
 static void install_vectors(void) {
@@ -178,9 +163,7 @@ static void install_vectors(void) {
     for (i=0;i<RC_VECTOR_COUNT;i++) vectors[i]=original[i];
     vectors[16u+USART3_IRQn]=(uint32_t)(uintptr_t)uart_irq;
     vectors[16u+TIM5_IRQn]=(uint32_t)(uintptr_t)timer_irq;
-#ifdef RC_H723
     if (SCB->CCR & SCB_CCR_DC_Msk) SCB_CleanDCache_by_Addr(vectors,(int32_t)sizeof(vectors));
-#endif
     __DSB();
     SCB->VTOR=(uint32_t)(uintptr_t)vectors;
     __DSB(); __ISB();
@@ -188,9 +171,6 @@ static void install_vectors(void) {
 HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     uint32_t clock, uart_clock, divisor, period, brr, key;
     HAL_StatusTypeDef result;
-#ifdef RC_F103
-    uint32_t afio_enabled;
-#endif
     if (baud==0) return HAL_ERROR;
     key=lock();
     if (initialized_baud) {
@@ -198,11 +178,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
         unlock(key); return result;
     }
     if (occupied()) { unlock(key); return HAL_BUSY; }
-#ifdef RC_H723
     uart_clock=uart_kernel_clock();
-#else
-    uart_clock=HAL_RCC_GetPCLK2Freq();
-#endif
     clock=timer_clock();
     brr=(uint32_t)(((uint64_t)uart_clock+baud/2u)/baud);
     divisor=(clock+999999u)/1000000u;
@@ -210,34 +186,16 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     period=(clock+divisor*500u)/(divisor*1000u);
     if (period==0 || period>65536u) { unlock(key); return HAL_ERROR; }
 
-#ifdef RC_F103
-    /* Inspect the retained remap with AFIO clocked; never rewrite MAPR/SWJ_CFG. */
-    afio_enabled=RCC->APB2ENR & RCC_APB2ENR_AFIOEN;
-    __HAL_RCC_AFIO_CLK_ENABLE();
-    if (AFIO->MAPR & AFIO_MAPR_USART1_REMAP) {
-        if (!afio_enabled) CLEAR_BIT(RCC->APB2ENR,RCC_APB2ENR_AFIOEN);
-        unlock(key); return HAL_BUSY;
-    }
-#endif
     __HAL_RCC_GPIOD_CLK_ENABLE(); __HAL_RCC_USART3_CLK_ENABLE(); __HAL_RCC_TIM5_CLK_ENABLE();
-#ifdef RC_H723
     MODIFY_REG(GPIOD->OTYPER,(1u<<8)|(1u<<9),0);
     MODIFY_REG(GPIOD->OSPEEDR,15u<<16,0);
     MODIFY_REG(GPIOD->PUPDR,15u<<16,4u<<16); /* RX pull-up, TX no pull. */
     MODIFY_REG(GPIOD->AFR[1],0xffu,0x77u); /* AF7 on PD8/PD9. */
     MODIFY_REG(GPIOD->MODER,15u<<16,10u<<16);
-#else
-    MODIFY_REG(GPIOA->CRH,0xff0u,0x8b0u); /* PA9 AF push-pull; PA10 input pull-up. */
-    GPIOA->BSRR=1u<<10;
-#endif
     USART3->CR1=0; USART3->CR2=RC_RX_INVERT ? USART_CR2_RXINV : 0; USART3->CR3=0;
-#ifdef RC_H723
     USART3->PRESC=0;
     USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
     USART3->RQR=USART_RQR_RXFRQ;
-#else
-    (void)USART3->SR; (void)USART3->DR;
-#endif
     USART3->BRR=brr;
     TIM5->CR1=0; TIM5->CR2=0; TIM5->SMCR=0; TIM5->DIER=0; TIM5->CCER=0;
     TIM5->PSC=divisor-1u; TIM5->ARR=period-1u;
@@ -247,11 +205,7 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
     NVIC_ClearPendingIRQ(USART3_IRQn); NVIC_ClearPendingIRQ(TIM5_IRQn);
     NVIC_SetPriority(USART3_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
     NVIC_SetPriority(TIM5_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
-#ifdef RC_H723
     USART3->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE_RXFNEIE;
-#else
-    USART3->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE;
-#endif
     TIM5->DIER=TIM_DIER_UIE; TIM5->CR1=TIM_CR1_CEN;
     initialized_baud=baud;
     NVIC_EnableIRQ(USART3_IRQn); NVIC_EnableIRQ(TIM5_IRQn);
@@ -261,20 +215,12 @@ HAL_StatusTypeDef RC_InitBaud(uint32_t baud) {
 HAL_StatusTypeDef RC_Init(void) { return RC_InitBaud(RC_DEFAULT_BAUD); }
 HAL_StatusTypeDef RC_InitBT630(void) { return RC_InitBaud(115200); }
 static void uart_irq(void) {
-#ifdef RC_H723
     uint32_t isr=USART3->ISR;
     if (isr & USART_ISR_RXNE_RXFNE) {
         uint8_t data=(uint8_t)USART3->RDR;
         if (!(isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE))) RC_ProcessByte(data);
     }
     if (isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE)) USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
-#else
-    uint32_t sr=USART3->SR;
-    if (sr & (USART_SR_RXNE|USART_SR_ORE|USART_SR_FE|USART_SR_NE|USART_SR_PE)) {
-        uint8_t data=(uint8_t)USART3->DR;
-        if ((sr & USART_SR_RXNE) && !(sr & (USART_SR_ORE|USART_SR_FE|USART_SR_NE|USART_SR_PE))) RC_ProcessByte(data);
-    }
-#endif
 }
 static void timer_irq(void) {
     if ((TIM5->SR & TIM_SR_UIF) && (TIM5->DIER & TIM_DIER_UIE)) {

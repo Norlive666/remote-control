@@ -282,13 +282,12 @@ class ControllerUiTest {
     }
     @Test fun oldModePreferencesCannotChangeBt630Panel() {
         val prefs=compose.activity.application.getSharedPreferences("controller",0)
-        for(oldMode in listOf("HC05","BLE_UART")) {
+        for(oldMode in listOf("obsolete-mode","BLE_UART")) {
             compose.runOnIdle { prefs.edit().putString("mode",oldMode).commit();(compose.activity.application as RemoteApplication).viewModelStore.clear() }
             compose.activityRule.scenario.recreate()
             compose.onNodeWithTag("connection-open").assertExists()
             compose.onNodeWithText("FSC-BT630",useUnmergedTree=true).assertExists()
             compose.onNodeWithText("50 Hz",useUnmergedTree=true).assertExists()
-            compose.onNodeWithTag("link-mode-HC05").assertDoesNotExist()
             compose.onNodeWithTag("link-mode-BLE_UART").assertDoesNotExist()
         }
         compose.runOnIdle { prefs.edit().remove("mode").commit() }
@@ -491,7 +490,6 @@ class ControllerUiTest {
         assertTrue(slider.bottom<=left.top+2f)
         assertTrue(left.right<hub.left && hub.right<right.left)
         compose.onNodeWithTag("panel-settings").assertIsDisplayed()
-        compose.onNodeWithText("HC-05 · 经典蓝牙").assertDoesNotExist()
         compose.onNodeWithText("已提交 0 帧 · 使能关闭").assertDoesNotExist()
     }
     @Test fun redundantButtonsAreRemovedAndModesCycleIndependently() {
