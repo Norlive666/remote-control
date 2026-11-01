@@ -86,6 +86,24 @@ class ControllerUiTest {
         compose.onNodeWithTag("bt630-dialog").assertExists()
         compose.runOnIdle { assertTrue(model().connected) }
     }
+    @Test fun explicitListSelectionReplacesWaitingTargetAndMainWaitCanBeCancelled() {
+        compose.onNodeWithTag("connection-open").performClick()
+        val adapter=compose.activity.getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        compose.runOnIdle {
+            val callback=RemoteViewModel::class.java.getDeclaredField("scanCallback").apply { isAccessible=true }.get(model()) as android.bluetooth.le.ScanCallback
+            for(address in listOf("F2:E7:05:FA:F8:F2","FA:ED:FC:7D:D5:F7")) {
+                callback.onScanResult(1,android.bluetooth.le.ScanResult(adapter.getRemoteDevice(address),null,-50,1))
+            }
+        }
+        compose.onNodeWithTag("bt630-connect-F2:E7:05:FA:F8:F2").performClick()
+        compose.runOnIdle { assertTrue(model().connecting) }
+        compose.onNodeWithTag("bt630-connect-FA:ED:FC:7D:D5:F7").assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals("FA:ED:FC:7D:D5:F7",model().selectedDevice?.address);assertTrue(model().connecting) }
+        compose.onNodeWithTag("bt630-close").performClick()
+        compose.runOnIdle { assertTrue(model().connecting) }
+        compose.onNodeWithTag("connection-open").performClick()
+        compose.runOnIdle { assertFalse(model().connecting);assertNull(model().selectedDevice) }
+    }
     private fun editLayout() {
         compose.onNodeWithTag("panel-settings").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("编辑布局").fetchSemanticsNodes().isNotEmpty() }
