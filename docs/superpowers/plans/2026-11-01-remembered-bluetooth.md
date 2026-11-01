@@ -33,4 +33,4 @@
 
 - [x] Bump code15/name1.9.0; update README/validation/release notes with gestures, memory, retries and background behavior. Keep driver3.0.0 links unchanged.
 - [x] Complete all unit/API35 UI/STM32 checks; inspect actual screenshot. Sign release APK locally with existing key and verify version, certificate, zip alignment and SHA256.
-- [ ] Push final source and publish v1.9.0 APK/checksum. Re-download public assets and compare bytes/checksum. Record exact tests, source revision, artifact hash and physical-device limitation. No firmware release.
+- [x] Push final source and publish v1.9.0 APK/checksum. Re-download public assets and compare bytes/checksum. Record exact tests, source revision, artifact hash and physical-device limitation. No firmware release.
