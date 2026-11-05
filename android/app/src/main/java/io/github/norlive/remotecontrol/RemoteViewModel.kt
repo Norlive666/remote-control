@@ -80,6 +80,11 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     var lastReceived by mutableStateOf("—"); private set
     var lastFrame by mutableStateOf("—"); private set
     var sent by mutableLongStateOf(0); private set
+    var debugHost by mutableStateOf(preferences.getString("debug.host","") ?: ""); private set
+    var debugPort by mutableStateOf(preferences.getString("debug.port","8765") ?: "8765"); private set
+    var debugToken by mutableStateOf(preferences.getString("debug.token","") ?: ""); private set
+    var debugMode by mutableStateOf(false); private set
+    var debugNote by mutableStateOf("调试链路未连接"); private set
     var stickConfigs by mutableStateOf(List(2) { index ->
         JoystickConfig(
             preferences.getInt("stick.$index.deadZone",5).coerceIn(0,30),
@@ -315,9 +320,47 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         startBackgroundService()
         if(token==generation && btSession===current)current.start()
     }
+    fun updateDebugConfig(host: String,port: String,token: String) {
+        debugHost=host.trim();debugPort=port.trim();debugToken=token.trim()
+        preferences.edit().putString("debug.host",debugHost).putString("debug.port",debugPort).putString("debug.token",debugToken).apply()
+    }
+    /** 复用整套操作逻辑，只把 20ms 帧的出口从蓝牙换成电脑上的 SWD 桥接器。 */
+    fun connectDebug() {
+        disconnect()
+        if(!foreground)return
+        val port=debugPort.toIntOrNull()
+        if(debugHost.isBlank() || port==null || port !in 1..65535) { error("请填写电脑 IP 和端口");return }
+        val baseUrl="http://${debugHost}:$port"
+        val token=debugToken
+        val exchange=generation
+        selectedDevice=null;lastReceived="—";lastFrame="—";sent=0;connectionError="";debugNote="正在连接 $baseUrl"
+        val current=Bt630Session(viewModelScope,
+            linkFactory={ TuneLink(baseUrl,token) { note -> main.post { if(exchange==generation)debugNote=note } } },
+            frame={ ControlProtocol.encode(session.state,sequence++) },
+            pauseControls={ buttons.cancelAll();session.suspendControl();sync() },
+            stateChanged={ state -> if(exchange==generation)when(state) {
+                is Bt630Session.State.Connecting -> {
+                    connected=false;connecting=true;connectionError=state.error ?: ""
+                    status="连接 调试链路 · 第 ${state.attempt} 次 · 点击取消"
+                }
+                Bt630Session.State.Ready -> { connected=true;connecting=false;connectionError="";status="已连接 调试链路 · 请手动使能" }
+                is Bt630Session.State.Failed -> {
+                    connected=false;connecting=false;connectionError=state.error;debugNote=state.error
+                    status="调试链路失败 · 请查看设置";btSession=null;debugMode=false
+                }
+                Bt630Session.State.Idle -> { connected=false;connecting=false;status="未连接" }
+            } },
+            sent={ bytes -> if(exchange==generation) {
+                sent++;lastFrame=bytes.joinToString(" ") { "%02X".format(it.toInt() and 255) }
+            } })
+        debugMode=true
+        btSession=current
+        if(exchange==generation && btSession===current)current.start()
+    }
     fun disconnect() {
         stopBackgroundService()
         buttons.cancelAll();generation++;stopScan();btSession?.stop();btSession=null
+        debugMode=false;debugNote="调试链路未连接"
         if(!foreground)unregisterAdapterObserver()
         selectedDevice=null;connectionError="";connected=false;connecting=false;session.suspendControl();sync();status="未连接"
     }

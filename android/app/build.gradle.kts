@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
     namespace = "io.github.norlive.remotecontrol"
     compileSdk = 35
-    defaultConfig { applicationId = "io.github.norlive.remotecontrol"; minSdk = 26; targetSdk = 35; versionCode = 15; versionName = "1.9.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "io.github.norlive.remotecontrol"; minSdk = 26; targetSdk = 35; versionCode = 16; versionName = "1.10.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     val signingPath = System.getenv("RC_KEYSTORE")
     if (signingPath != null) signingConfigs.create("releaseKey") {
         storeFile = file(signingPath); storePassword = System.getenv("RC_STORE_PASSWORD")
@@ -21,9 +21,13 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
+    // 单元测试里 android.jar 的 org.json 只是桩实现（调用即抛 Stub!），换成真正的实现。
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("org.mockito:mockito-core:5.15.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.robolectric:robolectric:4.14.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.03.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

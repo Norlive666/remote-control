@@ -207,6 +207,7 @@ private fun SettingsDialog(vm: RemoteViewModel,backgroundConnection: (Boolean)->
                         Text("保留使能和当前控制值；通知中可手动断开。系统仍可能停止应用。",fontSize=11.sp,color=Muted)
                     }
                 }
+                DebugLinkSettings(vm)
                 PanelControlsSettings(vm)
                 GamepadSettings(vm)
                 SliderSettings(vm)
