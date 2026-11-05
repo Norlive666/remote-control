@@ -562,6 +562,8 @@ class Bridge:
 def make_handler(bridge, token=None):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        # 响应头和正文分多次小写；不关 Nagle 的话每次响应都要等 ACK，一帧多 40ms。
+        disable_nagle_algorithm = True
 
         def log_message(self, fmt, *args):  # 静默，避免 50 Hz 刷屏
             pass
@@ -666,6 +668,8 @@ class RspClient:
                 "或改用 --backend pyocd。"
             ) from exc
         self.sock.settimeout(timeout)
+        # 关掉 Nagle：每帧要发好几个小包，攒包会让每个包多等几十毫秒的 ACK。
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._buf = b""
         # 握一次手：既是活性检查，也能识别“这个端口其实是 telnet 4444”。
         self.request("qSupported:multiprocess+")
