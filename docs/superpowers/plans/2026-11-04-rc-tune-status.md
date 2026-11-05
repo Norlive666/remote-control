@@ -57,7 +57,7 @@ cd android && ../tools/.cache/gradle-dist/gradle-8.11.1/bin/gradle --no-daemon -
   依赖按后端安装；ELF 查找改为递归（跳过 `.venv`/`node_modules`/`.cache` 等）。
 - `.vscode/tasks.json`：四个任务（先只读 / 允许写入 / 指定 ELF / pyOCD），**不占用
   `Ctrl+Shift+B`**，从「Tasks: Run Task」启动。
-- `tools/rc-tune/bind_key.py`：把两个「运行任务」快捷键合并进用户级 `keybindings.json`
+- 快捷键只在 `tools/rc-tune/README.md` 里给出手写的 `keybindings.json` 片段（不提供脚本）
   （默认 `ctrl+alt+r` / `ctrl+alt+shift+r`），写入前备份、保留 JSONC 注释、已存在则不动。
 - 测试 `32 passed`；RSP 用本地假 GDB server 验证封包、>1024 分片、坏校验、连接被拒文案。
 

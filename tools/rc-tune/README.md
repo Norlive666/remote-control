@@ -73,17 +73,8 @@ Windows 在 `%APPDATA%\Code\User\keybindings.json`，Linux 在
 已经有内容的话，把这两个对象加进现有数组，不要整段替换。冲突了就换
 `ctrl+alt+r` 这一串，`args` 必须与任务名一模一样。
 
-懒得手改就跑一次脚本，它会自动找 keybindings.json（Windows 的 `%APPDATA%\Code\User\`、
-Linux 的 `~/.config/Code/User/`、macOS 的 `Application Support`，也认 Insiders/VSCodium/Cursor）：
-
-```bash
-python tools/rc-tune/bind_key.py                       # 写入并备份成 keybindings.json.bak
-python tools/rc-tune/bind_key.py --dry-run             # 只看看会写成什么样
-python tools/rc-tune/bind_key.py --key f9 --key f10    # 换两个键（顺序：允许写入、先只读）
-```
-
-脚本只往数组末尾加条目，原有注释和绑定都保留；键已被别的命令占用时不覆盖，只打印提示
-（用 `--key` 换一个）；已经有同样的绑定就整段不动；写回前还会再校验一次 JSONC。
+想在图形界面里加：`Ctrl+K Ctrl+S` 打开快捷键页，右上角「打开键盘快捷方式(JSON)」，
+或者命令面板搜 `Preferences: Open Keyboard Shortcuts (JSON)`。
 
 任务在同名终端里常驻，停止按 `Ctrl+C` 或点终端右上角的垃圾桶。
 
