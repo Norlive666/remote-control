@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """一键启动 rc-tune 桥接器：准备依赖、找到 ELF、启动 HTTP 服务。
 
-Windows 与 Linux 通用。首次运行会在本目录建 `.venv` 并安装 pyocd/pyelftools；
+默认连接你已经在跑的 OpenOCD（GDB server，默认 127.0.0.1:3333），不抢占探针；
+也可以用 --backend pyocd 自己打开探针。首次运行会在本目录建 `.venv` 并装依赖，
 之后直接复用。双击用 `start.bat`（Windows）或 `./start.sh`（Linux），
 命令行用 `python3 start.py --allow-write`。
 
     python3 start.py                     # 自动找 ELF，交互询问是否允许写入
     python3 start.py --elf build/x.elf --allow-write
+    python3 start.py --ocd-port 3334     # OpenOCD 的 gdb_port 不是 3333 时
+    python3 start.py --backend pyocd     # 没跑 OpenOCD，让桥接器自己开探针
     python3 start.py --no-venv           # 复用当前解释器里已装的依赖
 """
 from __future__ import annotations
 
 import argparse
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -22,9 +26,13 @@ VENV = ROOT / ".venv"
 TUNE = ROOT / "tune.py"
 MIN_PYTHON = (3, 9)
 # 按优先级找固件：先当前目录，再常见的构建输出目录。
-ELF_PATTERNS = ("*.elf", "build/*.elf", "build/*/*.elf", "out/*.elf", "Debug/*.elf", "Release/*.elf")
+# 递归查找时跳过的目录：都是依赖/缓存，走进去只会拖慢启动。
+ELF_SKIP_DIRS = frozenset({".git", ".venv", "venv", "node_modules", "__pycache__", ".cache"})
+ELF_MAX_DEPTH = 6
 # (pip 包名, 导入模块名)：pip 装的是 pyelftools，模块却叫 elftools。
-DEPS = (("pyocd", "pyocd"), ("pyelftools", "elftools"))
+CORE_DEPS = (("pyelftools", "elftools"),)
+PYOCD_DEPS = (("pyocd", "pyocd"),)
+BACKENDS = ("openocd", "pyocd")
 
 
 class StartError(Exception):
@@ -35,8 +43,16 @@ class StartError(Exception):
 
 
 def find_elf(start: Path) -> Path:
-    """在 start 目录下找一个唯一的 .elf；找不到或有歧义都抛 StartError。"""
-    found = sorted({path.resolve() for pattern in ELF_PATTERNS for path in start.glob(pattern)})
+    """在 start 目录下递归找一个唯一的 .elf；找不到或有歧义都抛 StartError。"""
+    base = start.resolve()
+    found = set()
+    for root, dirs, files in os.walk(base):
+        depth = len(Path(root).relative_to(base).parts)
+        dirs[:] = [] if depth >= ELF_MAX_DEPTH else [d for d in dirs if d not in ELF_SKIP_DIRS]
+        for name in files:
+            if name.endswith(".elf"):
+                found.add(Path(root, name).resolve())
+    found = sorted(found)
     if len(found) == 1:
         return found[0]
     if found:
@@ -57,22 +73,55 @@ def running_in_venv() -> bool:
         return False
 
 
-def dep_probe() -> str:
-    return "import " + ", ".join(module for _, module in DEPS)
+def required_deps(backend: str) -> tuple[tuple[str, str], ...]:
+    """openocd 后端只需要 pyelftools，省掉 pyocd 那 15 MB。"""
+    return (PYOCD_DEPS if backend == "pyocd" else ()) + CORE_DEPS
 
 
-def package_names() -> list[str]:
-    return [package for package, _ in DEPS]
+def dep_probe(backend: str = "openocd") -> str:
+    return "import " + ", ".join(module for _, module in required_deps(backend))
 
 
-def missing_deps(python: Path) -> bool:
-    return subprocess.call([str(python), "-c", dep_probe()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0
+def package_names(backend: str = "openocd") -> list[str]:
+    return [package for package, _ in required_deps(backend)]
+
+
+def missing_deps(python: Path, backend: str = "openocd") -> bool:
+    probe = [str(python), "-c", dep_probe(backend)]
+    return subprocess.call(probe, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0
+
+
+def ensure_openocd(host: str, port: int, timeout: float = 0.5) -> None:
+    """先探一下 OpenOCD 的 GDB server，免得装完依赖才发现连不上。"""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return
+    except OSError as exc:
+        raise StartError(
+            f"连不上 OpenOCD（{host}:{port}）：{exc}\n"
+            "请先按你平时的任务启动 OpenOCD；如果它的 gdb_port 不是 3333，用 --ocd-port 指定。\n"
+            "没有 OpenOCD，或者想让桥接器自己占用探针，就用 --backend pyocd。"
+        ) from exc
 
 
 # ---------------------------------------------------------------- 环境准备
 
 
-def ensure_venv(index_url: str | None = None) -> Path:
+def install_deps(python: Path, index_url: str | None, backend: str) -> None:
+    packages = package_names(backend)
+    print(f"首次运行：安装 {' / '.join(packages)}（只需一次，网络慢可能要几分钟）…")
+    install = [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", *packages]
+    if index_url:
+        install += ["-i", index_url]
+    if subprocess.call(install) != 0:
+        raise StartError(
+            "依赖安装失败。请检查网络后重试，或换镜像：\n"
+            "  python start.py --index-url https://pypi.tuna.tsinghua.edu.cn/simple\n"
+            f"也可以手动执行：\n  {python} -m pip install {' '.join(packages)}"
+        )
+
+
+def ensure_venv(index_url: str | None, backend: str) -> Path:
     python = venv_python()
     if not python.exists():
         print(f"首次运行：在 {VENV} 创建虚拟环境…")
@@ -85,17 +134,10 @@ def ensure_venv(index_url: str | None = None) -> Path:
                 f"创建虚拟环境失败：{exc}\n"
                 "Debian/Ubuntu 需要先安装 python3-venv；或加 --no-venv 复用当前解释器。"
             ) from exc
-    if missing_deps(python):
-        print(f"首次运行：安装 {' / '.join(package_names())}（约 30 MB，只需一次，网络慢可能要几分钟）…")
-        install = [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--progress-bar", "off", *package_names()]
-        if index_url:
-            install += ["-i", index_url]
-        if subprocess.call(install) != 0:
-            raise StartError(
-                "依赖安装失败。请检查网络后重试，或换镜像：\n"
-                f"  python start.py --index-url https://pypi.tuna.tsinghua.edu.cn/simple\n"
-                f"也可以手动执行：\n  {python} -m pip install {' '.join(package_names())}"
-            )
+    if missing_deps(python, backend):
+        install_deps(python, index_url, backend)
+        if missing_deps(python, backend):
+            raise StartError(f"依赖装完了却导入不了：{dep_probe(backend)}")
     return python
 
 
@@ -126,10 +168,14 @@ def build_parser() -> argparse.ArgumentParser:
         description="准备依赖并启动 rc-tune 桥接器（电脑端）。",
         epilog="手机 App 里填本机打印的 IP、端口和令牌即可。",
     )
-    parser.add_argument("--elf", help="固件 ELF（不填则自动在 ./、build/ 等目录找唯一的 .elf）")
+    parser.add_argument("--elf", help="固件 ELF（不填则自动在当前目录递归找唯一的 .elf）")
     parser.add_argument("--symbol", default="g_rc", help="结构体变量名，默认 g_rc")
-    parser.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，默认 stm32h723vg")
-    parser.add_argument("--probe", default=None, help="多探针时用 UID 指定 DAPLink")
+    parser.add_argument("--backend", choices=BACKENDS, default="openocd",
+                        help="openocd：连已运行的 OpenOCD（默认，不抢探针）；pyocd：自己打开探针")
+    parser.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD 的 gdb_host，默认 127.0.0.1")
+    parser.add_argument("--ocd-port", type=int, default=3333, help="OpenOCD 的 gdb_port，默认 3333")
+    parser.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，仅 --backend pyocd 时使用")
+    parser.add_argument("--probe", default=None, help="多探针时用 UID 指定 DAPLink（仅 pyocd）")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认 0.0.0.0")
     parser.add_argument("--port", type=int, default=8765, help="监听端口，默认 8765")
     parser.add_argument("--watchdog-ms", type=int, default=300, help="断流多久写安全值，默认 300")
@@ -143,19 +189,31 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(args: argparse.Namespace) -> int:
     if not args.no_venv and not running_in_venv():
-        return relaunch(ensure_venv(args.index_url))
+        return relaunch(ensure_venv(args.index_url, args.backend))
+    if not args.no_venv and missing_deps(Path(sys.executable), args.backend):
+        # 换了后端（比如从 openocd 切到 pyocd）时补装缺的包。
+        install_deps(Path(sys.executable), args.index_url, args.backend)
 
     elf = Path(args.elf).expanduser().resolve() if args.elf else find_elf(Path.cwd())
     if not elf.is_file():
         raise StartError(f"ELF 不存在：{elf}")
 
+    if args.backend == "openocd":
+        ensure_openocd(args.ocd_host, args.ocd_port)
+
     write = args.allow_write or (not args.read_only and ask_write_permission())
     print(f"ELF     {elf}")
     print(f"模式    {'可写' if write else '只读（加 --allow-write 才能写入）'}")
+    if args.backend == "openocd":
+        print(f"链路    OpenOCD {args.ocd_host}:{args.ocd_port}（连已有实例，不抢探针）")
+    else:
+        print(f"链路    pyOCD {args.target}")
     if os.name == "nt":
         print("提示    Windows 首次运行可能弹防火墙提示，请允许「专用网络」，否则手机连不上。")
 
-    argv = ["serve", "--elf", str(elf), "--symbol", args.symbol, "--target", args.target,
+    argv = ["serve", "--elf", str(elf), "--symbol", args.symbol,
+            "--backend", args.backend, "--ocd-host", args.ocd_host, "--ocd-port", str(args.ocd_port),
+            "--target", args.target,
             "--host", args.host, "--port", str(args.port), "--watchdog-ms", str(args.watchdog_ms)]
     if args.probe:
         argv += ["--probe", args.probe]
@@ -189,4 +247,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

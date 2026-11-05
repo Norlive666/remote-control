@@ -572,11 +572,157 @@ class PyOcdProbe:
             pass
 
 
-def open_probe(target, unique_id=None):
+class RspClient:
+    """OpenOCD GDB server 的最小 GDB-Remote 客户端，只用来读写内存。
+
+    协议：`$<payload>#<两位十六进制校验>`，校验 = payload 各字节和 & 0xFF。
+    OpenOCD 在 gdb_port（默认 3333）上说这套协议，目标保持运行、不 halt。
+    """
+
+    def __init__(self, host="127.0.0.1", port=3333, timeout=2.0):
+        try:
+            self.sock = socket.create_connection((host, port), timeout=timeout)
+        except OSError as exc:
+            raise TuneError(
+                f"连不上 OpenOCD（{host}:{port}）：{exc}\n"
+                "请先启动 OpenOCD，并确认它的 gdb_port 与 --ocd-port 一致；"
+                "或改用 --backend pyocd。"
+            ) from exc
+        self.sock.settimeout(timeout)
+        self._buf = b""
+        # 握一次手：既是活性检查，也能识别“这个端口其实是 telnet 4444”。
+        self.request("qSupported:multiprocess+")
+
+    def close(self):
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+    # -- 底层收发 ----------------------------------------------------
+
+    def _send(self, raw):
+        try:
+            self.sock.sendall(raw)
+        except OSError as exc:
+            raise TuneError(f"向 OpenOCD 发送失败：{exc}") from exc
+
+    def _fill(self):
+        try:
+            data = self.sock.recv(4096)
+        except socket.timeout as exc:
+            raise TuneError(
+                "OpenOCD 无应答（超时）。确认 --ocd-port 指向的是 gdb_port，而不是 telnet 端口。"
+            ) from exc
+        except OSError as exc:
+            raise TuneError(f"读取 OpenOCD 失败：{exc}") from exc
+        if not data:
+            raise TuneError("OpenOCD 断开了连接（是不是被 halt/关闭了？）")
+        self._buf += data
+
+    def _byte(self):
+        while not self._buf:
+            self._fill()
+        value, self._buf = self._buf[0], self._buf[1:]
+        return value
+
+    @staticmethod
+    def _hex_digit(value):
+        if 48 <= value <= 57:
+            return value - 48
+        if 97 <= value <= 102:
+            return value - 87
+        if 65 <= value <= 70:
+            return value - 55
+        raise TuneError("OpenOCD 应答的校验位不是十六进制，这个端口可能不是 GDB server")
+
+    def _payload(self):
+        data = bytearray()
+        while True:
+            value = self._byte()
+            if value == ord("#"):
+                break
+            data.append(value)
+        check = self._hex_digit(self._byte()) * 16 + self._hex_digit(self._byte())
+        if check != sum(data) & 0xFF:
+            self._send(b"-")
+            raise TuneError("OpenOCD 应答校验失败（端口不像 GDB server，或链路被干扰）")
+        self._send(b"+")
+        return data.decode("ascii", "replace")
+
+    def _reply(self):
+        # 服务器可能夹带 '+'、'\n' 或空字节，找到下一个 '$' 才是正文。
+        while True:
+            value = self._byte()
+            if value == ord("$"):
+                return self._payload()
+            if value in (ord("+"), ord("\n"), 0):
+                continue
+            raise TuneError(f"OpenOCD 应答异常：0x{value:02x}")
+
+    # -- 一条命令 ----------------------------------------------------
+
+    def request(self, payload):
+        body = payload.encode("ascii")
+        packet = b"$" + body + b"#" + f"{sum(body) & 0xFF:02x}".encode("ascii")
+        for _ in range(3):
+            self._send(packet)
+            ack = self._byte()
+            if ack == ord("+"):
+                return self._reply()
+            if ack == ord("-"):
+                continue  # 服务器没收好，重发
+            if ack == ord("$"):
+                return self._payload()  # 某些实现不发 ack
+            raise TuneError(f"OpenOCD 应答异常：0x{ack:02x}")
+        raise TuneError("OpenOCD 连续拒收数据包，链路不可用")
+
+
+class OpenOcdProbe:
+    """通过已在运行的 OpenOCD（GDB server）读写内存，不抢占探针。"""
+
+    MAX_READ = 1024
+    MAX_WRITE = 512
+
+    def __init__(self, host="127.0.0.1", port=3333, timeout=2.0):
+        self.rsp = RspClient(host, port, timeout)
+
+    def read(self, address, size):
+        data = bytearray()
+        while size > 0:
+            chunk = min(size, self.MAX_READ)
+            reply = self.rsp.request(f"m{address:08x},{chunk:x}")
+            if not reply or reply.startswith("E"):
+                raise TuneError(f"OpenOCD 拒绝读取 0x{address:08X}（{chunk} 字节）：{reply or '空应答'}")
+            raw = bytes.fromhex(reply)
+            if len(raw) != chunk:
+                raise TuneError(f"OpenOCD 读取 0x{address:08X} 长度不符：{len(raw)} != {chunk}")
+            data += raw
+            address += chunk
+            size -= chunk
+        return bytes(data)
+
+    def write(self, address, data):
+        view = memoryview(bytes(data))
+        while view:
+            chunk = bytes(view[:self.MAX_WRITE])
+            reply = self.rsp.request(f"M{address:08x},{len(chunk):x}:{chunk.hex()}")
+            if reply != "OK":
+                raise TuneError(f"OpenOCD 拒绝写入 0x{address:08X}（{len(chunk)} 字节）：{reply or '空应答'}")
+            address += len(chunk)
+            view = view[len(chunk):]
+
+    def close(self):
+        self.rsp.close()
+
+
+def open_probe(backend="openocd", target=None, unique_id=None, ocd_host="127.0.0.1", ocd_port=3333):
+    if backend == "openocd":
+        return OpenOcdProbe(ocd_host, ocd_port)
     try:
         from pyocd.core.helpers import ConnectHelper
     except ImportError as exc:  # pragma: no cover
-        raise TuneError("缺少 pyocd：pip install pyocd") from exc
+        raise TuneError("缺少 pyocd：pip install pyocd，或改用 --backend openocd") from exc
     session = ConnectHelper.session_with_chosen_probe(
         target_override=target,
         unique_id=unique_id,
@@ -615,7 +761,11 @@ def main(argv=None):
     serve = sub.add_parser("serve", help="启动 HTTP 桥接器，等待 App 连接")
     serve.add_argument("--elf", required=True, help="带 -g 的固件 ELF")
     serve.add_argument("--symbol", default="g_rc", help="全局结构体名（默认 g_rc）")
-    serve.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名（默认 stm32h723vg）")
+    serve.add_argument("--backend", choices=("openocd", "pyocd"), default="openocd",
+                       help="调试后端：openocd（连已运行的 OpenOCD，默认）或 pyocd（自己占探针）")
+    serve.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD gdb_host（默认 127.0.0.1）")
+    serve.add_argument("--ocd-port", type=int, default=3333, help="OpenOCD gdb_port（默认 3333）")
+    serve.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，仅 --backend pyocd 时使用")
     serve.add_argument("--probe", default=None, help="探针 UID（多个探针时用）")
     serve.add_argument("--host", default="0.0.0.0", help="监听地址（默认 0.0.0.0）")
     serve.add_argument("--port", type=int, default=8765, help="监听端口（默认 8765）")
@@ -656,7 +806,7 @@ def _cmd_serve(args):
     if args.watchdog_ms < 50:
         raise TuneError("--watchdog-ms 不能小于 50")
 
-    probe = open_probe(args.target, args.probe)
+    probe = open_probe(args.backend, args.target, args.probe, args.ocd_host, args.ocd_port)
     bridge = Bridge(layout, probe, write_enabled=args.allow_write, watchdog=args.watchdog_ms / 1000)
     token = None if args.no_token else (args.token or secrets.token_hex(3))
 
@@ -665,7 +815,10 @@ def _cmd_serve(args):
     print(f"结构体   {layout.symbol} @0x{layout.address:08X}，{layout.size} 字节，{classify_region(layout.address)}")
     print(f"成员     {spans} …")
     print(f"当前值   {', '.join(f'{k}={v}' for k, v in list(current.items())[:6])}")
-    print(f"探针     {args.target}{' · ' + args.probe if args.probe else ''}")
+    if args.backend == "openocd":
+        print(f"链路     OpenOCD {args.ocd_host}:{args.ocd_port}（连已有实例，不抢探针）")
+    else:
+        print(f"链路     pyOCD {args.target}{' · ' + args.probe if args.probe else ''}")
     print(f"写入     {'已开启（--allow-write）' if args.allow_write else '只读（加 --allow-write 才能写）'}")
     print(f"令牌     {token if token else '未启用'}")
     host = "127.0.0.1" if args.host in ("0.0.0.0", "") else args.host
