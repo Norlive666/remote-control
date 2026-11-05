@@ -170,3 +170,25 @@ def test_health_reports_symbol_and_mode(server):
     assert payload["symbol"] == "g_rc"
     assert payload["address"] == BASE
     assert payload["write_enabled"] is True
+
+def test_two_slider_firmware_takes_the_first_two_sliders():
+    """Vela_Gimbal 一类的工程只有 sliders[2]，协议仍发 4 个，不应该整帧被拒。"""
+    members = [Member(f"axes[{i}]", "int16", 2, i * 2) for i in range(4)]
+    members += [Member(f"sliders[{i}]", "uint16", 2, 8 + i * 2) for i in range(2)]
+    members += [
+        Member("enabled", "bool", 1, 12),
+        Member("stopped", "bool", 1, 13),
+        Member("sequence", "uint8", 1, 14),
+        Member("link_valid", "bool", 1, 15),
+        Member("valid_frames", "uint32", 4, 16),
+        Member("crc_errors", "uint32", 4, 20),
+    ]
+    layout = StructLayout("g_rc", BASE, 24, members)
+    probe = FakeProbe()
+    bridge = Bridge(layout, probe, write_enabled=True)
+
+    result = bridge.apply_frame(make_frame(seq=3, axes=(1, 2, 3, 4), sliders=(100, 200, 300, 400)))
+
+    assert result["verified"] is True
+    raw = probe.read(BASE, 24)
+    assert struct.unpack_from("<2H", raw, 8) == (100, 200)

@@ -528,6 +528,9 @@ class Bridge:
             members = self.layout.group(name)
             if not members:
                 raise TuneError(f"结构体里没有成员 {name}（--symbol 选错了？）")
+            if name == "sliders" and len(members) < len(values):
+                # 有的工程只用前两个滑块（sliders[2]），协议仍按 10 位发满 4 个，按顺序取前几个。
+                values = values[:len(members)]
             if len(members) != len(values):
                 raise TuneError(f"成员 {name} 有 {len(members)} 个，但收到 {len(values)} 个值")
             for member, item in zip(members, values):
@@ -590,7 +593,16 @@ def make_handler(bridge, token=None):
                 return True
             return hmac.compare_digest(self.headers.get("X-Token", ""), token)
 
+        failures = {"count": 0}
+
         def _json(self, status, payload):
+            if status >= 400:
+                # 50 Hz 的失败会刷屏：前 3 次和之后每 200 次打一行，够定位问题。
+                failures = Handler.failures
+                failures["count"] += 1
+                count = failures["count"]
+                if count <= 3 or count % 200 == 0:
+                    print(f"请求失败 [{count}] HTTP {status}：{payload.get('error', '')}", flush=True)
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -889,7 +901,10 @@ def _cmd_serve(args):
     if args.allow_write:
         print("提示     g_rc 被蓝牙帧覆盖时以蓝牙为准；写入前请架空机器人。")
 
-    httpd = ThreadingHTTPServer((args.host, args.port), make_handler(bridge, token))
+    try:
+        httpd = ThreadingHTTPServer((args.host, args.port), make_handler(bridge, token))
+    except OSError as exc:
+        raise TuneError(f"监听 {args.host}:{args.port} 失败：{exc}\n端口被占用时，先关掉上一个桥接器窗口再启动。") from exc
     httpd.daemon_threads = True
     bridge.start_watchdog()
     try:
