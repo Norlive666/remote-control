@@ -55,8 +55,10 @@ cd android && ../tools/.cache/gradle-dist/gradle-8.11.1/bin/gradle --no-daemon -
   `--target` 退为 pyOCD 专用。
 - `start.py`：`ensure_openocd()` 先探端口，连不上就明说「先启动 OpenOCD，或用 --backend pyocd」；
   依赖按后端安装；ELF 查找改为递归（跳过 `.venv`/`node_modules`/`.cache` 等）。
-- `.vscode/tasks.json`：`Ctrl+Shift+B` = 「rc-tune: 启动（先只读）」，另有允许写入、
-  指定 ELF、pyOCD 三个任务。
+- `.vscode/tasks.json`：四个任务（先只读 / 允许写入 / 指定 ELF / pyOCD），**不占用
+  `Ctrl+Shift+B`**，从「Tasks: Run Task」启动。
+- `tools/rc-tune/bind_key.py`：把两个「运行任务」快捷键合并进用户级 `keybindings.json`
+  （默认 `ctrl+alt+r` / `ctrl+alt+shift+r`），写入前备份、保留 JSONC 注释、已存在则不动。
 - 测试 `32 passed`；RSP 用本地假 GDB server 验证封包、>1024 分片、坏校验、连接被拒文案。
 
 端口共用：3333 被调试会话占着时，让 OpenOCD `gdb_port 3334`、桥接器 `--ocd-port 3334`。

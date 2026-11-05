@@ -42,17 +42,46 @@ python3 tools/rc-tune/start.py --allow-write
 
 不加 `--allow-write` 时会交互问一次；非交互环境（管道、CI）默认只读。
 
-### 在 VS Code 里一键启动
+### 在 VS Code 里启动
 
-仓库自带 `.vscode/tasks.json`：`Ctrl+Shift+B` 直接跑「rc-tune: 启动（先只读）」，
-其余在「终端 → 运行任务」里：
+`.vscode/tasks.json` 里放了四个任务，从「终端 → 运行任务…」或命令面板的
+「Tasks: Run Task」里选：
 
 | 任务 | 用途 |
 |---|---|
-| `rc-tune: 启动（先只读）` | 默认构建任务；确认链路通、看一眼 `g_rc` 当前值 |
+| `rc-tune: 启动（先只读）` | 确认链路通、看一眼 `g_rc` 当前值 |
 | `rc-tune: 启动（允许写入）` | 正式驱动 |
 | `rc-tune: 启动（指定 ELF）` | 自动找 ELF 不准时，弹框输入路径 |
 | `rc-tune: 用 pyOCD 启动` | 没有 OpenOCD，让桥接器自己占探针 |
+
+这些任务**没有**占用 `Ctrl+Shift+B`（那是默认生成任务的快捷键，留给你自己的构建）。
+
+VS Code 不允许工作区自带快捷键，要真正一键启动，把下面两段贴进**用户级**
+`keybindings.json`（命令面板 → `Preferences: Open Keyboard Shortcuts (JSON)`；
+Windows 在 `%APPDATA%\Code\User\keybindings.json`，Linux 在
+`~/.config/Code/User/keybindings.json`）：
+
+```json
+[
+  { "key": "ctrl+alt+r", "command": "workbench.action.tasks.runTask", "args": "rc-tune: 启动（允许写入）" },
+  { "key": "ctrl+alt+shift+r", "command": "workbench.action.tasks.runTask", "args": "rc-tune: 启动（先只读）" }
+]
+```
+
+已经有内容的话，把这两个对象加进现有数组，不要整段替换。冲突了就换
+`ctrl+alt+r` 这一串，`args` 必须与任务名一模一样。
+
+懒得手改就跑一次脚本，它会自动找 keybindings.json（Windows 的 `%APPDATA%\Code\User\`、
+Linux 的 `~/.config/Code/User/`、macOS 的 `Application Support`，也认 Insiders/VSCodium/Cursor）：
+
+```bash
+python tools/rc-tune/bind_key.py                       # 写入并备份成 keybindings.json.bak
+python tools/rc-tune/bind_key.py --dry-run             # 只看看会写成什么样
+python tools/rc-tune/bind_key.py --key f9 --key f10    # 换两个键（顺序：允许写入、先只读）
+```
+
+脚本只往数组末尾加条目，原有注释和绑定都保留；键已被别的命令占用时不覆盖，只打印提示
+（用 `--key` 换一个）；已经有同样的绑定就整段不动；写回前还会再校验一次 JSONC。
 
 任务在同名终端里常驻，停止按 `Ctrl+C` 或点终端右上角的垃圾桶。
 

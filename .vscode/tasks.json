@@ -3,12 +3,20 @@
   "tasks": [
     {
       "label": "rc-tune: 启动（先只读）",
-      "detail": "连已运行的 OpenOCD（gdb_port 3333），自动找 ELF，开 HTTP 桥接器；Ctrl+Shift+B 直接跑",
+      "detail": "连已运行的 OpenOCD（gdb_port 3333），自动找 ELF，开 HTTP 桥接器；用命令面板的「Tasks: Run Task」启动",
       "type": "shell",
       "command": "tools/rc-tune/start.sh",
-      "windows": { "command": "tools\\rc-tune\\start.bat" },
-      "args": ["--backend", "openocd", "--read-only"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "windows": {
+        "command": "tools\\rc-tune\\start.bat"
+      },
+      "args": [
+        "--backend",
+        "openocd",
+        "--read-only"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -16,17 +24,24 @@
         "clear": true,
         "focus": true,
         "showReuseMessage": false
-      },
-      "group": { "kind": "build", "isDefault": true }
+      }
     },
     {
       "label": "rc-tune: 启动（允许写入）",
       "detail": "同上，但允许把 App 的操作写进 g_rc。确认机器人已架空再跑",
       "type": "shell",
       "command": "tools/rc-tune/start.sh",
-      "windows": { "command": "tools\\rc-tune\\start.bat" },
-      "args": ["--backend", "openocd", "--allow-write"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "windows": {
+        "command": "tools\\rc-tune\\start.bat"
+      },
+      "args": [
+        "--backend",
+        "openocd",
+        "--allow-write"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -34,17 +49,25 @@
         "clear": true,
         "focus": true,
         "showReuseMessage": false
-      },
-      "group": "build"
+      }
     },
     {
       "label": "rc-tune: 启动（指定 ELF）",
       "detail": "自动查找不准时用；会弹框问固件路径，写入权限按终端里的提问回答",
       "type": "shell",
       "command": "tools/rc-tune/start.sh",
-      "windows": { "command": "tools\\rc-tune\\start.bat" },
-      "args": ["--backend", "openocd", "--elf", "${input:elfPath}"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "windows": {
+        "command": "tools\\rc-tune\\start.bat"
+      },
+      "args": [
+        "--backend",
+        "openocd",
+        "--elf",
+        "${input:elfPath}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -52,17 +75,23 @@
         "clear": true,
         "focus": true,
         "showReuseMessage": false
-      },
-      "group": "build"
+      }
     },
     {
       "label": "rc-tune: 用 pyOCD 启动（自己占探针）",
       "detail": "没有 OpenOCD 时用；会独占 DAPLink，首次要装 15 MB 的 pyocd",
       "type": "shell",
       "command": "tools/rc-tune/start.sh",
-      "windows": { "command": "tools\\rc-tune\\start.bat" },
-      "args": ["--backend", "pyocd"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "windows": {
+        "command": "tools\\rc-tune\\start.bat"
+      },
+      "args": [
+        "--backend",
+        "pyocd"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "problemMatcher": [],
       "presentation": {
         "reveal": "always",
@@ -70,8 +99,7 @@
         "clear": true,
         "focus": true,
         "showReuseMessage": false
-      },
-      "group": "build"
+      }
     }
   ],
   "inputs": [
