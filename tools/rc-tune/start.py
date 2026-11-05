@@ -15,12 +15,14 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import os
 import re
 import shutil
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -113,6 +115,61 @@ def detect_openocd_port() -> int | None:
     return ports[0] if ports else None
 
 
+OCD_CONFIGS = ("interface/stlink.cfg", "target/stm32h7x.cfg")
+
+
+def port_open(host: str, port: int, timeout: float = 0.3) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def openocd_args(port: int, extra_configs: list[str]) -> list[str]:
+    """组一条 `openocd -f …`：先按当前目录找配置，再带上用户追加的 cfg。"""
+    args = ["-s", str(Path.cwd())]
+    for config in (*OCD_CONFIGS, *extra_configs):
+        args += ["-f", config]
+    args += ["-c", f"gdb_port {port}"]
+    return args
+
+
+def spawn_openocd(port: int, extra_configs: list[str]) -> subprocess.Popen:
+    """没有现成的 OpenOCD 时自己起一个；输出留在同一个终端里，方便看探针报错。"""
+    exe = shutil.which("openocd")
+    if exe is None:
+        raise StartError("PATH 里找不到 openocd；先装上，或者去掉 --start-ocd、自己启动 OpenOCD。")
+    argv = [exe, *openocd_args(port, extra_configs)]
+    print(f"启动 OpenOCD：{' '.join(argv)}", flush=True)
+    return subprocess.Popen(argv)
+
+
+def wait_for_port(proc: subprocess.Popen, host: str, port: int, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if port_open(host, port):
+            return
+        if proc.poll() is not None:
+            raise StartError(
+                f"OpenOCD 启动失败（退出码 {proc.returncode}），看上面它自己的报错；"
+                "多半是探针被别的程序占着，或配置文件路径不对。"
+            )
+        time.sleep(0.1)
+    stop_openocd(proc)
+    raise StartError(f"OpenOCD 10 秒内没在 {host}:{port} 开 gdb server，检查探针是否插好、是否被占用。")
+
+
+def stop_openocd(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
 def ensure_openocd(host: str, port: int, timeout: float = 0.5) -> None:
     """先探一下 OpenOCD 的 GDB server，免得装完依赖才发现连不上。"""
     try:
@@ -203,6 +260,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="OpenOCD 的 gdb_port；0 表示自动探测运行中的 openocd，探测不到再用 3333",
     )
+    parser.add_argument("--start-ocd", action="store_true",
+                        help="端口上没人时自己起一个 OpenOCD（退出时关闭），用于真正的一键启动")
+    parser.add_argument("--ocd-config", action="append", default=[], metavar="CFG",
+                        help="额外加载的 OpenOCD 配置，可给多次，如 .vscode/h7-debug-unlock.cfg")
     parser.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，仅 --backend pyocd 时使用")
     parser.add_argument("--probe", default=None, help="多探针时用 UID 指定 DAPLink（仅 pyocd）")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认 0.0.0.0")
@@ -227,19 +288,25 @@ def run(args: argparse.Namespace) -> int:
     if not elf.is_file():
         raise StartError(f"ELF 不存在：{elf}")
 
+    spawned = False
     if args.backend == "openocd":
-        if not args.ocd_port:
-            detected = detect_openocd_port()
-            args.ocd_port = detected or 3333
-            if detected:
-                print(f"探测到运行中的 OpenOCD，gdb_port = {detected}")
-        ensure_openocd(args.ocd_host, args.ocd_port)
+        args.ocd_port = args.ocd_port or detect_openocd_port() or 3333
+        if port_open(args.ocd_host, args.ocd_port):
+            print(f"探测到运行中的 OpenOCD，gdb_port = {args.ocd_port}")
+        elif args.start_ocd:
+            proc = spawn_openocd(args.ocd_port, args.ocd_config)
+            atexit.register(stop_openocd, proc)
+            wait_for_port(proc, args.ocd_host, args.ocd_port)
+            spawned = True
+        else:
+            ensure_openocd(args.ocd_host, args.ocd_port)
 
     write = args.allow_write or (not args.read_only and ask_write_permission())
     print(f"ELF     {elf}")
     print(f"模式    {'可写' if write else '只读（加 --allow-write 才能写入）'}")
     if args.backend == "openocd":
-        print(f"链路    OpenOCD {args.ocd_host}:{args.ocd_port}（连已有实例，不抢探针）")
+        how = "脚本启动，退出时关闭" if spawned else "连已有实例，不抢探针"
+        print(f"链路    OpenOCD {args.ocd_host}:{args.ocd_port}（{how}）")
     else:
         print(f"链路    pyOCD {args.target}")
     if os.name == "nt":

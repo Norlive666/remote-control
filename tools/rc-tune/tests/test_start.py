@@ -121,3 +121,50 @@ def test_ignores_dynamic_zero_port(monkeypatch):
     _fake_pgrep(monkeypatch, '4242 openocd -c "gdb_port 0"\n')
 
     assert detect_openocd_port() is None
+
+
+def test_openocd_args_include_configs_and_port(monkeypatch, tmp_path):
+    from start import openocd_args
+
+    monkeypatch.chdir(tmp_path)
+
+    args = openocd_args(3333, [".vscode/h7-debug-unlock.cfg"])
+
+    assert args[:2] == ["-s", str(tmp_path)]
+    assert args.count("-f") == 3
+    assert "interface/stlink.cfg" in args
+    assert "target/stm32h7x.cfg" in args
+    assert ".vscode/h7-debug-unlock.cfg" in args
+    assert args[-1] == "gdb_port 3333"
+
+
+def test_port_open_sees_listening_socket():
+    import socket
+
+    from start import port_open
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    live = server.getsockname()[1]
+
+    try:
+        assert port_open("127.0.0.1", live) is True
+    finally:
+        server.close()
+
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    dead = probe.getsockname()[1]
+    probe.close()
+
+    assert port_open("127.0.0.1", dead) is False
+
+
+def test_missing_openocd_binary_is_explained(monkeypatch):
+    from start import StartError, spawn_openocd
+
+    monkeypatch.setattr("start.shutil.which", lambda name: None)
+
+    with pytest.raises(StartError, match="openocd"):
+        spawn_openocd(3333, [])

@@ -34,6 +34,8 @@ python3 tools/rc-tune/start.py --allow-write
 | `--elf build/robot.elf` | 手动指定固件 |
 | `--backend openocd` / `pyocd` | 连已有 OpenOCD（默认）或自己开探针 |
 | `--ocd-host` / `--ocd-port` | OpenOCD 的 gdb_host/gdb_port；`--ocd-port 0`（默认）会从运行中的 `openocd` 命令行自动探测，探测不到再用 3333 |
+| `--start-ocd` | 端口上没人时自己起一个 OpenOCD（`interface/stlink.cfg` + `target/stm32h7x.cfg`），退出时一并关掉 |
+| `--ocd-config CFG` | 额外加载的 OpenOCD 配置，可给多次，如 `.vscode/h7-debug-unlock.cfg` |
 | `--allow-write` / `--read-only` | 跳过 / 强制关闭写入询问 |
 | `--port 8765` | 换端口 |
 | `--probe <UID>` | 多个探针时指定（仅 pyocd） |
