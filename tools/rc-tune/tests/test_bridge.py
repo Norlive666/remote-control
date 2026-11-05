@@ -158,6 +158,24 @@ def test_http_rejects_bad_token(server):
     assert probe.writes == 0
 
 
+def test_http_without_token_accepts_anyone():
+    """默认不校验令牌：App 的令牌留空也能直接写。"""
+    probe = FakeProbe()
+    bridge = Bridge(g_rc_layout(), probe, write_enabled=True)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(bridge))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, payload = post(httpd.server_address[1], make_frame(axes=(1, 2, 3, 4)), token=None)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    assert status == 200
+    assert payload["verified"] is True
+    assert struct.unpack_from("<4h", probe.mem, 0) == (1, 2, 3, 4)
+
+
 def test_health_reports_symbol_and_mode(server):
     port, _, _ = server
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

@@ -260,7 +260,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="start.py",
         description="准备依赖并启动 rc-tune 桥接器（电脑端）。",
-        epilog="手机 App 里填本机打印的 IP、端口和令牌即可。",
+        epilog="手机 App 里填本机打印的 IP 和端口即可（令牌默认关闭）。",
     )
     parser.add_argument("--elf", help="固件 ELF（不填则自动在当前目录递归找唯一的 .elf）")
     parser.add_argument("--symbol", default="g_rc", help="结构体变量名，默认 g_rc")
@@ -282,7 +282,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认 0.0.0.0")
     parser.add_argument("--port", type=int, default=8765, help="监听端口，默认 8765")
     parser.add_argument("--watchdog-ms", type=int, default=300, help="断流多久写安全值，默认 300")
-    parser.add_argument("--no-token", action="store_true", help="关闭令牌校验（不推荐）")
+    parser.add_argument("--token", default=None, help="可选令牌：默认不校验，给了就要求 App 带同一个值")
+    parser.add_argument("--no-token", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--allow-write", action="store_true", help="允许写入 g_rc")
     parser.add_argument("--read-only", action="store_true", help="强制只读，不再询问")
     parser.add_argument("--no-venv", action="store_true", help="不建虚拟环境，直接用当前解释器")
@@ -331,8 +332,8 @@ def run(args: argparse.Namespace) -> int:
             "--host", args.host, "--port", str(args.port), "--watchdog-ms", str(args.watchdog_ms)]
     if args.probe:
         argv += ["--probe", args.probe]
-    if args.no_token:
-        argv += ["--no-token"]
+    if args.token:
+        argv += ["--token", args.token]
     if write:
         argv += ["--allow-write"]
     sys.path.insert(0, str(ROOT))

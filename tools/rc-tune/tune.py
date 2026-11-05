@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
-import secrets
 import socket
 import struct
 import threading
@@ -859,8 +858,12 @@ def main(argv=None):
     serve.add_argument("--host", default="0.0.0.0", help="监听地址（默认 0.0.0.0）")
     serve.add_argument("--port", type=int, default=8765, help="监听端口（默认 8765）")
     serve.add_argument("--allow-write", action="store_true", help="允许写入（默认只读）")
-    serve.add_argument("--token", default=None, help="固定令牌（默认随机生成）")
-    serve.add_argument("--no-token", action="store_true", help="关闭令牌校验（仅限可信网络）")
+    serve.add_argument(
+        "--token",
+        default=None,
+        help="可选令牌：默认不校验；给了之后 App 要在 X-Token 里带同一个值",
+    )
+    serve.add_argument("--no-token", action="store_true", help=argparse.SUPPRESS)
     serve.add_argument("--watchdog-ms", type=int, default=300, help="断流多久后写安全值（默认 300）")
     serve.set_defaults(handler=_cmd_serve)
 
@@ -897,7 +900,7 @@ def _cmd_serve(args):
 
     probe = open_probe(args.backend, args.target, args.probe, args.ocd_host, args.ocd_port)
     bridge = Bridge(layout, probe, write_enabled=args.allow_write, watchdog=args.watchdog_ms / 1000)
-    token = None if args.no_token else (args.token or secrets.token_hex(3))
+    token = args.token or None
 
     current = bridge.read_state()
     spans = ", ".join(f"{m.id}" for m in layout.members[:6])
@@ -909,7 +912,7 @@ def _cmd_serve(args):
     else:
         print(f"链路     pyOCD {args.target}{' · ' + args.probe if args.probe else ''}")
     print(f"写入     {'已开启（--allow-write）' if args.allow_write else '只读（加 --allow-write 才能写）'}")
-    print(f"令牌     {token if token else '未启用'}")
+    print(f"令牌     {token if token else '未启用（局域网内可直接连接）'}")
     host = "127.0.0.1" if args.host in ("0.0.0.0", "") else args.host
     shown = "0.0.0.0" if args.host in ("0.0.0.0", "") else args.host
     ip = lan_address() if args.host == "0.0.0.0" else host
