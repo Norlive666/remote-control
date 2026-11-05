@@ -94,7 +94,10 @@ def parse_layout(elf_path, symbol):
             raise TuneError("ELF 里没有 DWARF 调试信息（编译时加 -g，且不要 strip）")
         dwarf = elf.get_dwarf_info()
         cu, die, address = _find_variable(dwarf, symbol)
-        target = _unwrap(cu, die.attributes["DW_AT_type"].value)
+        type_ref = _type_ref(cu, die)
+        if type_ref is None:
+            raise TuneError(f"{symbol} 的 DIE 没有类型信息（可能已被优化掉）")
+        target = _unwrap(cu, type_ref)
         if target.tag != "DW_TAG_structure_type":
             raise TuneError(f"{symbol} 是 {target.tag}，不是结构体")
         members = _collect_members(cu, target)
@@ -111,8 +114,7 @@ def _find_variable(dwarf, symbol):
         for die in cu.iter_DIEs():
             if die.tag != "DW_TAG_variable":
                 continue
-            name = die.attributes.get("DW_AT_name")
-            if name is None or name.value.decode("utf-8", "replace") != symbol:
+            if _variable_name(cu, die) != symbol:
                 continue
             address = _static_address(die)
             if address is not None:
@@ -145,15 +147,66 @@ def _static_address(die):
     return None
 
 
-def _unwrap(cu, offset):
-    die = cu.get_DIE_from_refaddr(offset)
+_CU_RELATIVE_FORMS = frozenset({
+    "DW_FORM_ref1",
+    "DW_FORM_ref2",
+    "DW_FORM_ref4",
+    "DW_FORM_ref8",
+    "DW_FORM_ref_udata",
+})
+
+
+def _die_from_ref(cu, attr):
+    """把 DW_AT_type / DW_AT_specification 的引用解析成 DIE。
+
+    ref1/2/4/8/ref_udata 是 CU 内偏移，必须先加 cu_offset；
+    ref_addr 已经是 .debug_info 里的全局偏移。早期版本两种混用，
+    所以全局偏移失败时再试一次 CU 内偏移。
+    """
+    value = attr.value
+    if getattr(attr, "form", "") in _CU_RELATIVE_FORMS:
+        return cu.get_DIE_from_refaddr(cu.cu_offset + value)
+    try:
+        return cu.get_DIE_from_refaddr(value)
+    except Exception:
+        return cu.get_DIE_from_refaddr(cu.cu_offset + value)
+
+
+def _variable_name(cu, die):
+    """变量的名字；定义 DIE 常只有 DW_AT_specification，名字写在声明 DIE 上。"""
+    for _ in range(8):
+        name = die.attributes.get("DW_AT_name")
+        if name is not None:
+            return name.value.decode("utf-8", "replace")
+        ref = die.attributes.get("DW_AT_specification") or die.attributes.get("DW_AT_abstract_origin")
+        if ref is None:
+            return None
+        die = _die_from_ref(cu, ref)
+    return None
+
+
+def _type_ref(cu, die):
+    """DIE 的 DW_AT_type；定义 DIE 常常把类型也留给声明 DIE。"""
+    for _ in range(8):
+        attr = die.attributes.get("DW_AT_type")
+        if attr is not None:
+            return attr
+        ref = die.attributes.get("DW_AT_specification") or die.attributes.get("DW_AT_abstract_origin")
+        if ref is None:
+            return None
+        die = _die_from_ref(cu, ref)
+    return None
+
+
+def _unwrap(cu, ref):
+    die = _die_from_ref(cu, ref)
     for _ in range(16):
         if die.tag not in WRAPPER_TAGS:
             return die
-        ref = die.attributes.get("DW_AT_type")
-        if ref is None:
+        inner = die.attributes.get("DW_AT_type")
+        if inner is None:
             raise TuneError(f"{die.tag} 缺少底层类型")
-        die = cu.get_DIE_from_refaddr(ref.value)
+        die = _die_from_ref(cu, inner)
     raise TuneError("类型嵌套过深")
 
 
@@ -171,7 +224,7 @@ def _collect_members(cu, struct_die, prefix=""):
         offset = _member_offset(child)
         if offset is None:
             raise TuneError(f"成员 {name} 的偏移不是编译期常量")
-        _flatten(cu, _unwrap(cu, child.attributes["DW_AT_type"].value), name, offset, members)
+        _flatten(cu, _unwrap(cu, child.attributes["DW_AT_type"]), name, offset, members)
     members.sort(key=lambda member: member.offset)
     return members
 
@@ -227,7 +280,7 @@ def _flatten(cu, die, name, offset, out):
     elif die.tag == "DW_TAG_pointer_type":
         out.append(Member(name, "ptr", die.attributes["DW_AT_byte_size"].value, offset))
     elif die.tag == "DW_TAG_array_type":
-        element = _unwrap(cu, die.attributes["DW_AT_type"].value)
+        element = _unwrap(cu, die.attributes["DW_AT_type"])
         ranges = [child for child in die.iter_children() if child.tag == "DW_TAG_subrange_type"]
         if len(ranges) != 1:
             raise TuneError(f"{name} 是多维数组或长度未知，暂不支持")
@@ -718,7 +771,15 @@ class OpenOcdProbe:
 
 def open_probe(backend="openocd", target=None, unique_id=None, ocd_host="127.0.0.1", ocd_port=3333):
     if backend == "openocd":
-        return OpenOcdProbe(ocd_host, ocd_port)
+        # OpenOCD 刚起来时可能还留着上一个探测连接，重试几次再放弃。
+        deadline = time.monotonic() + 2.0
+        while True:
+            try:
+                return OpenOcdProbe(ocd_host, ocd_port)
+            except TuneError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
     try:
         from pyocd.core.helpers import ConnectHelper
     except ImportError as exc:  # pragma: no cover

@@ -118,9 +118,22 @@ def detect_openocd_port() -> int | None:
 OCD_CONFIGS = ("interface/stlink.cfg", "target/stm32h7x.cfg")
 
 
+def _rsp_packet(payload: bytes) -> bytes:
+    return b"$" + payload + b"#" + f"{sum(payload) & 0xFF:02x}".encode()
+
+
 def port_open(host: str, port: int, timeout: float = 0.3) -> bool:
+    """连一下 gdb_port；连上就先问好再 detach，免得 OpenOCD 留着半个会话把真连接挡掉。"""
     try:
-        with socket.create_connection((host, port), timeout=timeout):
+        with socket.create_connection((host, port), timeout=timeout) as sock:
+            sock.settimeout(timeout)
+            try:
+                sock.sendall(_rsp_packet(b"qSupported:multiprocess+"))
+                sock.recv(4096)
+                sock.sendall(_rsp_packet(b"D"))
+                sock.recv(64)
+            except OSError:
+                pass
             return True
     except OSError:
         return False
