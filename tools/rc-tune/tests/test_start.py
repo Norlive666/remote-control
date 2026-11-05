@@ -94,3 +94,30 @@ def test_ignores_elfs_in_dependency_dirs(tmp_path):
         (tmp_path / skipped / "fake.elf").write_bytes(b"\x7fELF")
 
     assert find_elf(tmp_path).name == "robot.elf"
+
+
+def _fake_pgrep(monkeypatch, stdout: str) -> None:
+    class Done:
+        pass
+
+    done = Done()
+    done.stdout = stdout
+    monkeypatch.setattr("start.subprocess.run", lambda *a, **k: done)
+
+
+@pytest.mark.skipif(__import__("shutil").which("pgrep") is None, reason="需要 pgrep")
+def test_detects_gdb_port_from_running_openocd(monkeypatch):
+    from start import detect_openocd_port
+
+    _fake_pgrep(monkeypatch, '4242 openocd -f interface/stlink.cfg -c "gdb_port 50001" -f target/stm32h7x.cfg\n')
+
+    assert detect_openocd_port() == 50001
+
+
+@pytest.mark.skipif(__import__("shutil").which("pgrep") is None, reason="需要 pgrep")
+def test_ignores_dynamic_zero_port(monkeypatch):
+    from start import detect_openocd_port
+
+    _fake_pgrep(monkeypatch, '4242 openocd -c "gdb_port 0"\n')
+
+    assert detect_openocd_port() is None

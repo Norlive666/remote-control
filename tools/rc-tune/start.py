@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -91,6 +93,26 @@ def missing_deps(python: Path, backend: str = "openocd") -> bool:
     return subprocess.call(probe, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0
 
 
+def detect_openocd_port() -> int | None:
+    """从正在运行的 openocd 命令行里捡 gdb_port。
+
+    VS Code 的调试扩展会给 OpenOCD 随机分配端口，命令行里通常能看到
+    `-c "gdb_port 50001"`；读出来就不用每次手填 --ocd-port。
+    """
+    pgrep = shutil.which("pgrep")
+    if pgrep is None:
+        return None
+    try:
+        result = subprocess.run(
+            [pgrep, "-af", "openocd"], capture_output=True, text=True, timeout=2, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    ports = [int(m) for m in re.findall(r"gdb_port\s+(\d+)", result.stdout)]
+    ports = [port for port in ports if port > 0]
+    return ports[0] if ports else None
+
+
 def ensure_openocd(host: str, port: int, timeout: float = 0.5) -> None:
     """先探一下 OpenOCD 的 GDB server，免得装完依赖才发现连不上。"""
     try:
@@ -99,7 +121,9 @@ def ensure_openocd(host: str, port: int, timeout: float = 0.5) -> None:
     except OSError as exc:
         raise StartError(
             f"连不上 OpenOCD（{host}:{port}）：{exc}\n"
-            "请先按你平时的任务启动 OpenOCD；如果它的 gdb_port 不是 3333，用 --ocd-port 指定。\n"
+            "请先按你平时的任务启动 OpenOCD。端口不确定就看一眼 `pgrep -a openocd`，"
+            "里面通常有 `-c gdb_port 50001` 这样的字样；也可以用 --ocd-port 指定，"
+            "或者干脆用 --ocd-port 0 让脚本自己探测。\n"
             "没有 OpenOCD，或者想让桥接器自己占用探针，就用 --backend pyocd。"
         ) from exc
 
@@ -173,7 +197,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend", choices=BACKENDS, default="openocd",
                         help="openocd：连已运行的 OpenOCD（默认，不抢探针）；pyocd：自己打开探针")
     parser.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD 的 gdb_host，默认 127.0.0.1")
-    parser.add_argument("--ocd-port", type=int, default=3333, help="OpenOCD 的 gdb_port，默认 3333")
+    parser.add_argument(
+        "--ocd-port",
+        type=int,
+        default=0,
+        help="OpenOCD 的 gdb_port；0 表示自动探测运行中的 openocd，探测不到再用 3333",
+    )
     parser.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，仅 --backend pyocd 时使用")
     parser.add_argument("--probe", default=None, help="多探针时用 UID 指定 DAPLink（仅 pyocd）")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认 0.0.0.0")
@@ -199,6 +228,11 @@ def run(args: argparse.Namespace) -> int:
         raise StartError(f"ELF 不存在：{elf}")
 
     if args.backend == "openocd":
+        if not args.ocd_port:
+            detected = detect_openocd_port()
+            args.ocd_port = detected or 3333
+            if detected:
+                print(f"探测到运行中的 OpenOCD，gdb_port = {detected}")
         ensure_openocd(args.ocd_host, args.ocd_port)
 
     write = args.allow_write or (not args.read_only and ask_write_permission())

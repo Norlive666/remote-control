@@ -33,7 +33,7 @@ python3 tools/rc-tune/start.py --allow-write
 |---|---|
 | `--elf build/robot.elf` | 手动指定固件 |
 | `--backend openocd` / `pyocd` | 连已有 OpenOCD（默认）或自己开探针 |
-| `--ocd-host` / `--ocd-port` | OpenOCD 的 gdb_host/gdb_port，默认 `127.0.0.1:3333` |
+| `--ocd-host` / `--ocd-port` | OpenOCD 的 gdb_host/gdb_port；`--ocd-port 0`（默认）会从运行中的 `openocd` 命令行自动探测，探测不到再用 3333 |
 | `--allow-write` / `--read-only` | 跳过 / 强制关闭写入询问 |
 | `--port 8765` | 换端口 |
 | `--probe <UID>` | 多个探针时指定（仅 pyocd） |
