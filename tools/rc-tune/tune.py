@@ -449,12 +449,16 @@ class Bridge:
             "sequence": frame.seq,
             "link_valid": 1,
         }
+        # 先记「收到活帧」再读写：一帧在 SWD 上偶尔要几百毫秒，
+        # 如果等写完再刷新时间戳，看门狗会把它误判成断流。
+        self.last_frame = self.clock()
+        self.armed = True
         with self.lock:
             self._write_locked(written)
             observed = self._read_locked()
+            # 在锁内再刷一次：看门狗等锁期间，这一帧已经写完了。
+            self.last_frame = self.clock()
         self.frames += 1
-        self.last_frame = self.clock()
-        self.armed = True
         verified = True
         for name, value in written.items():
             values = value if isinstance(value, (list, tuple)) else [value]
@@ -476,11 +480,16 @@ class Bridge:
         if self.clock() - self.last_frame <= self.watchdog:
             return False
         with self.lock:
-            if not self.armed:
+            # 等锁期间可能刚好有帧写完，进来再确认一次。
+            if not self.armed or self.clock() - self.last_frame <= self.watchdog:
                 return False
             self._write_locked(NEUTRAL)
             self.armed = False
         return True
+
+    def silence(self):
+        """距离上一帧有多久（秒），给看门狗打印用。"""
+        return self.clock() - self.last_frame
 
     def start_watchdog(self):
         interval = max(0.02, self.watchdog / 4)
@@ -490,7 +499,10 @@ class Bridge:
                 time.sleep(interval)
                 try:
                     if self.tick():
-                        print("控制流中断，已写入安全值（输出 0 / stopped=1）")
+                        print(
+                            f"控制流中断，已写入安全值（输出 0 / stopped=1）"
+                            f"：共 {self.frames} 帧，断流 {self.silence():.2f}s"
+                        )
                 except Exception as exc:  # 探针掉线不应该杀掉看门狗线程
                     print(f"看门狗写入失败：{exc}")
 

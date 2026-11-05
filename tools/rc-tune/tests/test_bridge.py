@@ -192,3 +192,23 @@ def test_two_slider_firmware_takes_the_first_two_sliders():
     assert result["verified"] is True
     raw = probe.read(BASE, 24)
     assert struct.unpack_from("<2H", raw, 8) == (100, 200)
+
+
+def test_slow_frame_does_not_look_like_a_dead_link():
+    """SWD 上一帧偶尔要几百毫秒；写慢不能被看门狗当成断流。"""
+    now = [0.0]
+    probe = FakeProbe()
+    bridge = Bridge(g_rc_layout(), probe, write_enabled=True, clock=lambda: now[0])
+
+    bridge.apply_frame(make_frame(seq=1))
+
+    original = probe.write
+
+    def slow(address, data):
+        now[0] += 0.5
+        original(address, data)
+
+    probe.write = slow
+    bridge.apply_frame(make_frame(seq=2))
+
+    assert bridge.tick() is False
