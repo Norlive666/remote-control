@@ -670,8 +670,22 @@ class RspClient:
         # 关掉 Nagle：每帧要发好几个小包，攒包会让每个包多等几十毫秒的 ACK。
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._buf = b""
+        self._received = False
         # 握一次手：既是活性检查，也能识别“这个端口其实是 telnet 4444”。
-        self.request("qSupported:multiprocess+")
+        try:
+            self.request("qSupported:multiprocess+")
+        except TuneError as exc:
+            self.close()
+            if not self._received:
+                raise TuneError(
+                    f"连上了 {host}:{port}，但它立刻关闭了连接。\n"
+                    "OpenOCD 0.12 及更早的 gdb_port 同一时间只接受一个客户端，"
+                    "多半是 Cortex-Debug/mcu-debug 的调试会话还连着。\n"
+                    "把调试会话停掉（OpenOCD 本身不用关）再启动 rc-tune；"
+                    "或者用 --ocd-port 指到另一个 gdb_port。\n"
+                    f"（原始错误：{exc}）"
+                ) from exc
+            raise
 
     def close(self):
         try:
@@ -697,7 +711,10 @@ class RspClient:
         except OSError as exc:
             raise TuneError(f"读取 OpenOCD 失败：{exc}") from exc
         if not data:
-            raise TuneError("OpenOCD 断开了连接（是不是被 halt/关闭了？）")
+            raise TuneError(
+                "OpenOCD 断开了连接（调试会话被停止、端口被别的客户端抢走，或目标复位了）。"
+            )
+        self._received = True
         self._buf += data
 
     def _byte(self):

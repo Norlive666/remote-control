@@ -80,14 +80,20 @@ Windows 在 `%APPDATA%\Code\User\keybindings.json`，Linux 在
 
 ## 和已有的 OpenOCD 共存
 
-桥接器不启动 OpenOCD，只连它的 **GDB server**（`gdb_port`），所以两边可以同时开着：
+桥接器不启动 OpenOCD，只连它的 **GDB server**（`gdb_port`），所以 OpenOCD 可以一直开着：
 
 ```bash
 openocd -f board/stm32h7x.cfg -c "gdb_port 3333"    # 你平时那条任务
 python3 tools/rc-tune/start.py --allow-write        # 另开一个终端
 ```
 
-如果 3333 已被 Cortex-Debug 之类的调试会话占着，给 OpenOCD 换个端口，桥接器指过去即可：
+**同一个 `gdb_port` 同时只有一个 GDB 客户端**（OpenOCD 0.12 及更早；`gdb_max_connections`
+要 0.13 才有）。如果 VS Code 里正开着 Cortex-Debug/mcu-debug 的调试会话，它占着这个连接，
+桥接器再连会被 OpenOCD 立刻关掉——终端里会看到「连上了 …，但它立刻关闭了连接」，
+OpenOCD 那边则打印 `attempted 'gdb' connection rejected`。
+
+解决只要一步：**先停掉调试会话**（OpenOCD 本身不用关，也别关），再启动 rc-tune。
+调试期间想同时调参，就得让 OpenOCD 换端口重启、两边各自指过去：
 
 ```bash
 openocd -f board/stm32h7x.cfg -c "gdb_port 3334"

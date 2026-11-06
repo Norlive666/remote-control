@@ -25,9 +25,10 @@ def frame(payload: str, corrupt: bool = False) -> bytes:
 class FakeGdbServer:
     """只实现 qSupported / m / M，够桥接器用了。"""
 
-    def __init__(self, corrupt_first: bool = False, size: int = 256):
+    def __init__(self, corrupt_first: bool = False, size: int = 256, close_immediately: bool = False):
         self.mem = bytearray(size)
         self.corrupt_first = corrupt_first
+        self.close_immediately = close_immediately
         self.requests: list[str] = []
         self._sock = socket.socket()
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -38,6 +39,9 @@ class FakeGdbServer:
 
     def _serve(self):
         conn, _ = self._sock.accept()
+        if self.close_immediately:  # 模拟 OpenOCD gdb_port 客户端已满
+            conn.close()
+            return
         buf = b""
         try:
             while True:
@@ -91,6 +95,17 @@ def test_reads_bytes_at_address():
         assert server.requests[0].startswith("qSupported")
     finally:
         probe.close()
+
+
+def test_busy_gdb_port_explains_the_single_client_limit():
+    server = FakeGdbServer(close_immediately=True)
+
+    with pytest.raises(TuneError) as raised:
+        OpenOcdProbe("127.0.0.1", server.port)
+
+    message = str(raised.value)
+    assert "只接受一个客户端" in message
+    assert "--ocd-port" in message
 
 
 def test_writes_bytes_and_reports_ok():

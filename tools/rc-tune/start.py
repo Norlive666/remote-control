@@ -306,7 +306,7 @@ def run(args: argparse.Namespace) -> int:
     if args.backend == "openocd":
         args.ocd_port = args.ocd_port or detect_openocd_port() or 3333
         if port_open(args.ocd_host, args.ocd_port):
-            print(f"探测到运行中的 OpenOCD，gdb_port = {args.ocd_port}")
+            print(f"探测到运行中的 OpenOCD，gdb_port = {args.ocd_port}（不对就用 --ocd-port 指定）")
         elif args.start_ocd:
             proc = spawn_openocd(args.ocd_port, args.ocd_config)
             atexit.register(stop_openocd, proc)
