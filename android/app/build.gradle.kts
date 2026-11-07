@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
     namespace = "io.github.norlive.remotecontrol"
     compileSdk = 35
-    defaultConfig { applicationId = "io.github.norlive.remotecontrol"; minSdk = 26; targetSdk = 35; versionCode = 18; versionName = "1.12.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
+    defaultConfig { applicationId = "io.github.norlive.remotecontrol"; minSdk = 26; targetSdk = 35; versionCode = 19; versionName = "1.12.1"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
     val signingPath = System.getenv("RC_KEYSTORE")
     if (signingPath != null) signingConfigs.create("releaseKey") {
         storeFile = file(signingPath); storePassword = System.getenv("RC_STORE_PASSWORD")
@@ -29,6 +29,7 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.15.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.03.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

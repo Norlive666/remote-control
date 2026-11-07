@@ -1,3 +1,10 @@
+# Android v1.12.1 — 设置窗口越界修复（2026-11-07）
+
+- 用户截图显示设置页右侧关闭按钮与底部应用栏被裁切。核对当前 Compose 1.7.8 的 DialogLayout 实现：非平台默认宽度路径以配置中的屏幕 dp 和显示密度重新测量，未沿用传入的窗口尺寸约束。新增窗口封装从调用方实际 Android View 读取宽高并监听后续布局变化，在 Dialog 内容最外层设置尺寸上限；设置页及嵌套控件编辑页共用，原安全区、IME padding、关闭回调保留。
+- Robolectric 原生图形回归在实际 900×400 窗口、系统配置额外增加 300dp 宽/150dp 高时，旧版失败：设置区域右边界1192、下边界542。修复后同一测试通过，关闭键、应用按钮及嵌套编辑页保存按钮可见且位于窗口内，取消编辑仍保留设置页。
+- 全量 `testDebugUnitTest assembleRelease compileDebugAndroidTestKotlin` 成功，129项单元测试无失败/跳过，正式构建包含 lintVital。独立审查未发现阻断问题。
+- 本机签名 v1.12.1 / versionCode19，证书与v1.12.0一致；v2/v3签名与zipalign通过。APK SHA256 `e8a8aae6db43b7babdf2807a1a543adeb22d451383a92ff39707a7999927a286`。本轮没有真机复测，截图手机上的键盘、显示缩放及系统栏行为仍需安装验证。
+
 # Android v1.12.0 — 横屏分类设置页（2026-11-07）
 
 - 功能提交 `841819b` 的 [GitHub Actions 42324504967](https://github.com/Norlive666/remote-control/actions/runs/42324504967) 已完成：Android 构建/单元测试、STM32 检查、模拟器界面测试均成功。新增回归覆盖滑块档位变化后手柄映射草稿失效。

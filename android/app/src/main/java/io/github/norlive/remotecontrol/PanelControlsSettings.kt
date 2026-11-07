@@ -13,8 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import java.util.UUID
 
 @Composable
@@ -64,7 +62,7 @@ private fun PanelControlEditor(original: PanelControl,allowSlider: Boolean,onSav
         PanelControlType.SHORT_LONG -> pressValue!=null && pressValue in 0..1000 && longValue!=null && longValue in 0..1000
         PanelControlType.CYCLE -> cycleValues.size in 2..8 && cycleValues.distinct().size==cycleValues.size && cycleValues.all { it!=null && it in 0..1000 }
     }
-    Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false, decorFitsSystemWindows=false)) {
+    SettingsWindow(onClose) {
         Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(12.dp)) {
             Surface(shape=MaterialTheme.shapes.large,modifier=Modifier.fillMaxSize()) {
                 SettingsPage("编辑控件", "保存后即时生效", footer = {

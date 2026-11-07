@@ -28,8 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
 
 private enum class SettingsSection(val title: String, val tag: String, val icon: ImageVector) {
@@ -52,8 +50,7 @@ internal fun SettingsDialog(
     val selected = SettingsSection.valueOf(selectedName)
     val pages = rememberSaveableStateHolder()
     val keyboard = LocalSoftwareKeyboardController.current
-    Dialog(onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    SettingsWindow(onClose) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(8.dp)) {
             val navigationWidth = if (maxWidth >= 760.dp) 172.dp else 140.dp
             Surface(shape = RoundedCornerShape(20.dp), color = Color.White,
