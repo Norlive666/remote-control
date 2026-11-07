@@ -123,6 +123,34 @@ def test_ignores_dynamic_zero_port(monkeypatch):
     assert detect_openocd_port() is None
 
 
+@pytest.mark.skipif(__import__("shutil").which("pgrep") is None, reason="需要 pgrep")
+def test_detects_gdb_port_written_as_two_words(monkeypatch):
+    from start import detect_openocd_port
+
+    _fake_pgrep(monkeypatch, '4242 openocd -f interface/stlink.cfg -c "gdb port 50002" -f target/stm32h7x.cfg\n')
+
+    assert detect_openocd_port() == 50002
+
+
+def test_pgrep_matches_the_exact_process_name(monkeypatch):
+    import start
+
+    seen = {}
+
+    class Done:
+        stdout = ""
+
+    def fake_run(argv, **kwargs):
+        seen["argv"] = argv
+        return Done()
+
+    monkeypatch.setattr("start.subprocess.run", fake_run)
+
+    start.openocd_processes()
+
+    assert "-ax" in seen["argv"]
+
+
 def test_openocd_args_include_configs_and_port(monkeypatch, tmp_path):
     from start import openocd_args
 

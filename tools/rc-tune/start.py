@@ -95,22 +95,31 @@ def missing_deps(python: Path, backend: str = "openocd") -> bool:
     return subprocess.call(probe, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0
 
 
+def openocd_processes() -> list[str]:
+    """正在跑的 openocd 进程（`pgrep -ax`：按进程名精确匹配）。
+
+    不能用 `-af openocd`——那样会连 start.py 自己（参数里就有 `openocd`）一起匹配上。
+    """
+    pgrep = shutil.which("pgrep")
+    if pgrep is None:
+        return []
+    try:
+        result = subprocess.run(
+            [pgrep, "-ax", "openocd"], capture_output=True, text=True, timeout=2, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
 def detect_openocd_port() -> int | None:
     """从正在运行的 openocd 命令行里捡 gdb_port。
 
     VS Code 的调试扩展会给 OpenOCD 随机分配端口，命令行里通常能看到
-    `-c "gdb_port 50001"`；读出来就不用每次手填 --ocd-port。
+    `-c "gdb_port 50001"`（0.12 起也接受 `gdb port`）；读出来就不用每次手填 --ocd-port。
     """
-    pgrep = shutil.which("pgrep")
-    if pgrep is None:
-        return None
-    try:
-        result = subprocess.run(
-            [pgrep, "-af", "openocd"], capture_output=True, text=True, timeout=2, check=False
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    ports = [int(m) for m in re.findall(r"gdb_port\s+(\d+)", result.stdout)]
+    lines = "\n".join(openocd_processes())
+    ports = [int(m) for m in re.findall(r"gdb[ _]port\s+(\d+)", lines)]
     ports = [port for port in ports if port > 0]
     return ports[0] if ports else None
 
@@ -165,12 +174,18 @@ def wait_for_port(proc: subprocess.Popen, host: str, port: int, timeout: float =
             return
         if proc.poll() is not None:
             raise StartError(
-                f"OpenOCD 启动失败（退出码 {proc.returncode}），看上面它自己的报错；"
-                "多半是探针被别的程序占着，或配置文件路径不对。"
+                f"OpenOCD 启动失败（退出码 {proc.returncode}）——上面「Error: open failed」那行就是原因。\n"
+                "常见情况：\n"
+                "  1. 探针被占着：`pgrep -ax openocd` 看有没有残留进程，有就先 kill 掉；\n"
+                "  2. 探针没识别：`lsusb | grep -i st-link` 看不到就重新插拔一次 USB；\n"
+                "  3. 也可以不自己起：关掉 VS Code 的调试会话，然后用它留下的 OpenOCD（去掉 --start-ocd）。"
             )
         time.sleep(0.1)
     stop_openocd(proc)
-    raise StartError(f"OpenOCD 10 秒内没在 {host}:{port} 开 gdb server，检查探针是否插好、是否被占用。")
+    raise StartError(
+        f"OpenOCD 10 秒内没在 {host}:{port} 开 gdb server。\n"
+        "检查探针是否插好（`lsusb | grep -i st-link`）、是否被别的程序占用（`pgrep -ax openocd`）。"
+    )
 
 
 def stop_openocd(proc: subprocess.Popen) -> None:
@@ -353,6 +368,14 @@ def run(args: argparse.Namespace) -> int:
         if port_open(args.ocd_host, args.ocd_port):
             print(f"探测到运行中的 OpenOCD，gdb_port = {args.ocd_port}（不对就用 --ocd-port 指定）")
         elif args.start_ocd:
+            running = openocd_processes()
+            if running:
+                raise StartError(
+                    "已经有一个 openocd 在跑，但没法确定它的 gdb_port：\n  "
+                    + "\n  ".join(running)
+                    + "\n先停掉它（Ctrl+C / kill），或者用 --ocd-port 指定它的 gdb_port。"
+                    "\n同时起两个 OpenOCD 会抢同一个探针。"
+                )
             proc = spawn_openocd(args.ocd_port, args.ocd_config)
             atexit.register(stop_openocd, proc)
             wait_for_port(proc, args.ocd_host, args.ocd_port)
