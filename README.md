@@ -6,7 +6,9 @@
 
 ## 下载与开始测试
 
-安装 APK：[v1.9.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+安装 APK：[v1.12.0 下载](https://github.com/Norlive666/remote-control/releases/download/v1.12.0/remote-control-v1.12.0.apk)。Android 8.0 及以上；安装时允许来自浏览器或文件管理器的安装。
+
+v1.12.0 将横屏设置页整理为六个分类：连接与后台、摇杆参数、滑块档位、自定义控件、手柄映射、通信诊断。参数区独立滚动，应用按钮固定在底部；切换分类保留草稿，关闭设置丢弃未应用的输入。修改滑块档位后，手柄映射页会同步显示校正后的值。主操控面板、蓝牙通信和 STM32 协议沿用原有行为。
 
 当前驱动仅保留H723＋BT630；v4.0.0统一为带波特率参数的 `RC_Init(baud)`，升级时需同步修改调用。驱动源码包：[H723＋BT630 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)。
 

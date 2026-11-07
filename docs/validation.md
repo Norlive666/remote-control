@@ -1,3 +1,10 @@
+# Android v1.12.0 — 横屏分类设置页（2026-11-07）
+
+- 功能提交 `841819b` 的 [GitHub Actions 42324504967](https://github.com/Norlive666/remote-control/actions/runs/42324504967) 已完成：Android 构建/单元测试、STM32 检查、模拟器界面测试均成功。新增回归覆盖滑块档位变化后手柄映射草稿失效。
+- 发布版本 `1.12.0` / versionCode `18` 在本机执行 `testDebugUnitTest assembleRelease compileDebugAndroidTestKotlin` 成功，128 项单元测试通过，无失败或跳过；正式构建包含 lintVital 检查。版本提交仅修改版本元数据及文档，功能源码与上述通过 CI 的提交一致。
+- APK 使用仓库外本机密钥签名，v2/v3 签名及 zipalign 校验通过；证书 SHA256 `27a45a0d6cddcf3952d44cd114034833a245a8029af3fd355b6c1a9eb7563935` 与 v1.11.0 一致。APK SHA256 `9942bdc5c5b8428b89bbcedd8760f70ff38bc9ad2d48e54965e6943c13fa64d4`。
+- APK 包内确认 applicationId `io.github.norlive.remotecontrol`、版本 `1.12.0` / `18`、minSdk `26`。签名密钥/密码没有提交或上传。未进行真实手机、手柄及 BT630 长时间运行测试。
+
 # STM32 v4.0.0 — 单一带参数初始化接口
 
 - [stm32-v4.0.0已发布](https://github.com/Norlive666/remote-control/releases/tag/stm32-v4.0.0)，标签源码`9ed385be5293ec76a34c97e11e1565977e052ee9`。6个文件与源码一致，重新下载公开ZIP及校验文件与本机逐字节一致，SHA256 `d22144d62db7256ce5c3240acff64b2ca7bec422ada55d9beaf9e72f599baef3`。[GitHub检查41306652847](https://github.com/Norlive666/remote-control/actions/runs/41306652847)的H723任务124848304297及Android构建/单元任务124848304357通过；本条不声称尚在运行的UI任务结果。目标文件符号检查仅导出`RC_Init`一个初始化函数。独立复核的两处文档用词已修正并复审，无遗留问题。
