@@ -5,6 +5,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,5 +64,22 @@ class SettingsWindowTest {
                 resources.updateConfiguration(original, resources.displayMetrics)
             }
         }
+    }
+
+    @Test fun settingsUseActivitySurfaceAndClosingRestoresControls() {
+        val activitySurface = compose.onNodeWithTag("panel-settings").fetchSemanticsNode().root
+        compose.onNodeWithTag("panel-settings").performClick()
+        assertSame("Settings must not create a separately positioned Android window",
+            activitySurface, compose.onNodeWithTag("controller-settings").fetchSemanticsNode().root)
+        compose.onNodeWithTag("settings-done").performClick()
+        compose.onNodeWithTag("panel-settings").assertIsDisplayed()
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("panel-controls-settings").performScrollTo().performClick()
+        compose.onNodeWithTag("control-add").performClick()
+        assertSame(activitySurface, compose.onNodeWithTag("control-save").fetchSemanticsNode().root)
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("control-add").assertIsDisplayed()
+        compose.runOnIdle { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithTag("panel-settings").assertIsDisplayed()
     }
 }

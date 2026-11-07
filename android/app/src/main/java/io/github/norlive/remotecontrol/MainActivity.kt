@@ -146,7 +146,9 @@ private fun ControllerScreen(vm: RemoteViewModel,backgroundConnection: (Boolean)
     connectLast: ()->Unit,connect: (DeviceRow)->Unit,cancel: ()->Unit,closeDevices: ()->Unit,systemBluetooth: ()->Unit) {
     var connectionDialog by remember { mutableStateOf(false) }
     fun openDevices() { connectionDialog=true;if(!vm.connected && !vm.connecting)scan() }
-    EditablePanel(vm) { name ->
+    if(vm.settingsOpen) {
+        SettingsDialog(vm,backgroundConnection,onEdit={vm.updateSettingsOpen(false);vm.beginLayoutEdit()}) { vm.updateSettingsOpen(false) }
+    } else EditablePanel(vm) { name ->
         if(name=="settings")vm.updateSettingsOpen(true)
         else if(!vm.layoutEditing)when(name) {
             "devices" -> openDevices()
@@ -160,7 +162,6 @@ private fun ControllerScreen(vm: RemoteViewModel,backgroundConnection: (Boolean)
     if(connectionDialog) Bt630ConnectionDialog(vm,scan,systemBluetooth,connect,cancel) {
         closeDevices();connectionDialog=false
     }
-    if(vm.settingsOpen) SettingsDialog(vm,backgroundConnection,onEdit={vm.updateSettingsOpen(false);vm.beginLayoutEdit()}) { vm.updateSettingsOpen(false) }
 }
 
 /** Separate gesture scope per stick; a pointer never transfers from one stick to the other. */

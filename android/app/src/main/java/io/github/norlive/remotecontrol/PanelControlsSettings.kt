@@ -18,6 +18,12 @@ import java.util.UUID
 @Composable
 internal fun PanelControlsSettings(vm: RemoteViewModel) {
     var editing by remember { mutableStateOf<PanelControl?>(null) }
+    val original = editing
+    if (original != null) {
+        PanelControlEditor(original, vm.panelControls.count { it.type == PanelControlType.SLIDER && it.id != original.id } < 4,
+            onSave = { vm.savePanelControl(it); editing = null }, onClose = { editing = null })
+        return
+    }
     SettingsPage("自定义控件", "设置控件名称、备注、类型和目标通道", footer = {
         Text("${vm.panelControls.size} 个控件 · 最多 4 个滑块", fontSize = 11.sp,
             color = Muted, modifier = Modifier.weight(1f))
@@ -39,10 +45,6 @@ internal fun PanelControlsSettings(vm: RemoteViewModel) {
             }
         }
         Text("添加或修改后自动保存；位置和大小在“编辑布局”中调整。", fontSize = 12.sp, color = Muted)
-    }
-    editing?.let { original ->
-        PanelControlEditor(original, vm.panelControls.count { it.type == PanelControlType.SLIDER && it.id != original.id } < 4,
-            onSave = { vm.savePanelControl(it); editing = null }, onClose = { editing = null })
     }
 }
 
