@@ -234,3 +234,33 @@ def test_venv_from_an_older_python_is_rebuilt(monkeypatch, tmp_path, capsys):
     assert start.venv_python_version(rebuilt) is not None
     assert start.venv_recorded_version() != (3, 14)
     assert "Python 3.14" in capsys.readouterr().out
+
+
+def test_detects_the_probe_interface_from_launch_json(tmp_path):
+    from start import detect_interface
+
+    (tmp_path / ".vscode").mkdir()
+    (tmp_path / ".vscode" / "launch.json").write_text(
+        '{"configurations": [{"configFiles": ["interface/cmsis-dap.cfg", "target/stm32h7x.cfg"]}]}'
+    )
+
+    assert detect_interface(tmp_path) == "interface/cmsis-dap.cfg"
+
+
+def test_interface_flag_accepts_a_bare_name(tmp_path):
+    from start import resolve_interface
+
+    assert resolve_interface("cmsis-dap", tmp_path) == "interface/cmsis-dap.cfg"
+    assert resolve_interface("interface/jlink.cfg", tmp_path) == "interface/jlink.cfg"
+    assert resolve_interface(None, tmp_path) == "interface/stlink.cfg"
+
+
+def test_openocd_args_use_the_given_interface(monkeypatch, tmp_path):
+    from start import openocd_args
+
+    monkeypatch.chdir(tmp_path)
+
+    args = openocd_args(3333, [], "interface/cmsis-dap.cfg")
+
+    assert "interface/cmsis-dap.cfg" in args
+    assert "interface/stlink.cfg" not in args

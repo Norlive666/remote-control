@@ -124,7 +124,34 @@ def detect_openocd_port() -> int | None:
     return ports[0] if ports else None
 
 
-OCD_CONFIGS = ("interface/stlink.cfg", "target/stm32h7x.cfg")
+TARGET_CONFIG = "target/stm32h7x.cfg"
+DEFAULT_INTERFACE = "interface/stlink.cfg"
+# 自己起 OpenOCD 时要选对探针驱动：ST-Link 和 DAPLink 用的是两个 interface 文件。
+INTERFACE_FALLBACKS = ("interface/stlink.cfg", "interface/cmsis-dap.cfg")
+
+
+def detect_interface(root: Path) -> str | None:
+    """从工程的 .vscode/launch.json（其次 tasks.json）里读探针类型。
+
+    DAPLink 的工程里写的是 `interface/cmsis-dap.cfg`，ST-Link 是 `interface/stlink.cfg`；
+    读出来就不用猜，也不会拿 stlink.cfg 去开 DAPLink。
+    """
+    for name in ("launch.json", "tasks.json"):
+        try:
+            text = (root / ".vscode" / name).read_text()
+        except OSError:
+            continue
+        match = re.search(r"interface/([\w.+-]+)\.cfg", text)
+        if match:
+            return f"interface/{match.group(1)}.cfg"
+    return None
+
+
+def resolve_interface(value: str | None, root: Path) -> str:
+    """--interface 可以是 `cmsis-dap`、`interface/cmsis-dap.cfg` 或任意 cfg 路径。"""
+    if value:
+        return value if ("/" in value or value.endswith(".cfg")) else f"interface/{value}.cfg"
+    return detect_interface(root) or DEFAULT_INTERFACE
 
 
 def _rsp_packet(payload: bytes) -> bytes:
@@ -148,22 +175,26 @@ def port_open(host: str, port: int, timeout: float = 0.3) -> bool:
         return False
 
 
-def openocd_args(port: int, extra_configs: list[str]) -> list[str]:
+def openocd_args(
+    port: int, extra_configs: list[str], interface: str = DEFAULT_INTERFACE
+) -> list[str]:
     """组一条 `openocd -f …`：先按当前目录找配置，再带上用户追加的 cfg。"""
     args = ["-s", str(Path.cwd())]
-    for config in (*OCD_CONFIGS, *extra_configs):
+    for config in (interface, TARGET_CONFIG, *extra_configs):
         args += ["-f", config]
     args += ["-c", f"gdb_port {port}"]
     return args
 
 
-def spawn_openocd(port: int, extra_configs: list[str]) -> subprocess.Popen:
+def spawn_openocd(
+    port: int, extra_configs: list[str], interface: str = DEFAULT_INTERFACE
+) -> subprocess.Popen:
     """没有现成的 OpenOCD 时自己起一个；输出留在同一个终端里，方便看探针报错。"""
     exe = shutil.which("openocd")
     if exe is None:
         raise StartError("PATH 里找不到 openocd；先装上，或者去掉 --start-ocd、自己启动 OpenOCD。")
-    argv = [exe, *openocd_args(port, extra_configs)]
-    print(f"启动 OpenOCD：{' '.join(argv)}", flush=True)
+    argv = [exe, *openocd_args(port, extra_configs, interface)]
+    print(f"启动 OpenOCD（探针 {interface}）：{' '.join(argv)}", flush=True)
     return subprocess.Popen(argv)
 
 
@@ -337,6 +368,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="端口上没人时自己起一个 OpenOCD（退出时关闭），用于真正的一键启动")
     parser.add_argument("--ocd-config", action="append", default=[], metavar="CFG",
                         help="额外加载的 OpenOCD 配置，可给多次，如 .vscode/h7-debug-unlock.cfg")
+    parser.add_argument("--interface", default=None, metavar="NAME",
+                        help="探针驱动（stlink / cmsis-dap …）；默认从 .vscode/launch.json 猜，"
+                             "猜不到就 stlink、cmsis-dap 依次试")
     parser.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，仅 --backend pyocd 时使用")
     parser.add_argument("--probe", default=None, help="多探针时用 UID 指定 DAPLink（仅 pyocd）")
     parser.add_argument("--host", default="0.0.0.0", help="监听地址，默认 0.0.0.0")
@@ -376,10 +410,28 @@ def run(args: argparse.Namespace) -> int:
                     + "\n先停掉它（Ctrl+C / kill），或者用 --ocd-port 指定它的 gdb_port。"
                     "\n同时起两个 OpenOCD 会抢同一个探针。"
                 )
-            proc = spawn_openocd(args.ocd_port, args.ocd_config)
-            atexit.register(stop_openocd, proc)
-            wait_for_port(proc, args.ocd_host, args.ocd_port)
-            spawned = True
+            interface = resolve_interface(args.interface, Path.cwd())
+            candidates = [interface]
+            if not args.interface:
+                for other in INTERFACE_FALLBACKS:
+                    if other not in candidates:
+                        candidates.append(other)
+            last_error: StartError | None = None
+            for index, config in enumerate(candidates):
+                proc = spawn_openocd(args.ocd_port, args.ocd_config, config)
+                try:
+                    wait_for_port(proc, args.ocd_host, args.ocd_port)
+                except StartError as exc:
+                    last_error = exc
+                    stop_openocd(proc)
+                    if index + 1 < len(candidates):
+                        print(f"用 {config} 起不来，换 {candidates[index + 1]} 再试一次…", flush=True)
+                    continue
+                atexit.register(stop_openocd, proc)
+                spawned = True
+                break
+            if not spawned:
+                raise last_error or StartError("OpenOCD 启动失败")
         else:
             ensure_openocd(args.ocd_host, args.ocd_port)
 

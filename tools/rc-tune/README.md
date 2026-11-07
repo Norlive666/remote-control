@@ -108,6 +108,16 @@ python3 tools/rc-tune/start.py --ocd-port 3334 --allow-write
 个别版本在目标运行时读写 RAM 会报错或很慢，换成 `transport select dapdirect_swd`
 （OpenOCD 0.12+，ST-Link V2-1/V3）即可；实在不行走 `--backend pyocd`。
 
+**但 `--start-ocd` 要自己起 OpenOCD 时得选对驱动**：默认从工程 `.vscode/launch.json`
+里读（看到 `interface/cmsis-dap.cfg` 就用 DAPLink，看到 `stlink.cfg` 就用 ST-Link），
+读不到就先试 ST-Link、再试 CMSIS-DAP；也可以直接指定：
+
+```bash
+python3 tools/rc-tune/start.py --start-ocd --interface cmsis-dap
+```
+
+用错驱动时 OpenOCD 会报 `Error: open failed`（找不到对应 USB 设备）。
+
 ## 手动启动（依赖已装好的情况）
 
 ```bash
