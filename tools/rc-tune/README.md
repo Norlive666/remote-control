@@ -192,3 +192,5 @@ Android 侧有 `TuneLinkTest`（MockWebServer）。
 - pyOCD 后端需要内置 pack（`--target stm32h723vg`）；OpenOCD 后端由你的 cfg 决定目标，
   桥接器不关心芯片型号；
 - OpenOCD 的 GDB server 同时接入的连接数有限，被调试会话占满时给 OpenOCD 换 `gdb_port`。
+- 系统 Python 升级（例如 3.14 → 3.15）后，旧的 `.venv` 会失效；`start.py` 下次运行会
+  自动删掉重建，不用手动处理。

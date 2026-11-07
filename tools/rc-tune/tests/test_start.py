@@ -168,3 +168,41 @@ def test_missing_openocd_binary_is_explained(monkeypatch):
 
     with pytest.raises(StartError, match="openocd"):
         spawn_openocd(3333, [])
+
+
+def test_broken_venv_is_rebuilt(monkeypatch, tmp_path, capsys):
+    import start
+
+    venv = tmp_path / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    broken = venv / "bin" / "python"
+    broken.write_text("#!/bin/sh\nexit 1\n")
+    broken.chmod(0o755)
+
+    monkeypatch.setattr(start, "VENV", venv)
+    monkeypatch.setattr(start, "missing_deps", lambda python, backend="openocd": False)
+
+    python = start.ensure_venv(None, "openocd")
+
+    assert start.venv_works(python)
+    assert "删掉重建" in capsys.readouterr().out
+
+
+def test_venv_from_an_older_python_is_rebuilt(monkeypatch, tmp_path, capsys):
+    import start
+
+    venv = tmp_path / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    python = venv / "bin" / "python"
+    python.write_text("#!/bin/sh\necho 3 15\n")
+    python.chmod(0o755)
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\nversion = 3.14.9\n")
+
+    monkeypatch.setattr(start, "VENV", venv)
+    monkeypatch.setattr(start, "missing_deps", lambda python, backend="openocd": False)
+
+    rebuilt = start.ensure_venv(None, "openocd")
+
+    assert start.venv_python_version(rebuilt) is not None
+    assert start.venv_recorded_version() != (3, 14)
+    assert "Python 3.14" in capsys.readouterr().out

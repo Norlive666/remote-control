@@ -215,8 +215,53 @@ def install_deps(python: Path, index_url: str | None, backend: str) -> None:
         )
 
 
+def venv_python_version(python: Path) -> tuple[int, int] | None:
+    """venv 里的解释器真能跑起来时返回它的主次版本号，否则 None。"""
+    try:
+        done = subprocess.run(
+            [str(python), "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    parts = done.stdout.split()
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        return None
+    return int(parts[0]), int(parts[1])
+
+
+def venv_works(python: Path) -> bool:
+    return venv_python_version(python) is not None
+
+
+def venv_recorded_version() -> tuple[int, int] | None:
+    """pyvenv.cfg 里记下的版本——系统 Python 升级后会和实际跑的对不上。"""
+    try:
+        text = (VENV / "pyvenv.cfg").read_text()
+    except OSError:
+        return None
+    match = re.search(r"^version\s*=\s*(\d+)\.(\d+)", text, re.MULTILINE)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
 def ensure_venv(index_url: str | None, backend: str) -> Path:
     python = venv_python()
+    if python.exists():
+        actual = venv_python_version(python)
+        recorded = venv_recorded_version()
+        if actual is None:
+            print(f"虚拟环境已损坏（{python} 起不来，多半是系统 Python 升级过），删掉重建…")
+            shutil.rmtree(VENV, ignore_errors=True)
+        elif recorded is not None and recorded != actual:
+            print(
+                f"虚拟环境是用 Python {recorded[0]}.{recorded[1]} 建的，"
+                f"现在系统跑的是 {actual[0]}.{actual[1]}，删掉重建…"
+            )
+            shutil.rmtree(VENV, ignore_errors=True)
     if not python.exists():
         print(f"首次运行：在 {VENV} 创建虚拟环境…")
         import venv as venv_module
