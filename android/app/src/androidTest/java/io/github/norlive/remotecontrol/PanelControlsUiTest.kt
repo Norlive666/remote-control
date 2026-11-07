@@ -66,13 +66,13 @@ class PanelControlsUiTest {
     }
     @Test fun addEditReloadAndDeleteWidgetWithNote() {
         compose.onNodeWithTag("panel-settings").performClick()
-        compose.onNodeWithTag("panel-controls-settings").performClick()
-        compose.onNodeWithTag("control-add").performScrollTo().performClick()
-        compose.onNodeWithTag("control-title").performTextReplacement("夹爪")
-        compose.onNodeWithTag("control-note").performTextReplacement("按住打开")
+        compose.onNodeWithTag("panel-controls-settings").performScrollTo().performClick()
+        compose.onNodeWithTag("control-add").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("control-title").performScrollTo().performTextReplacement("夹爪")
+        compose.onNodeWithTag("control-note").performScrollTo().performTextReplacement("按住打开")
         compose.onNodeWithTag("control-channel").performScrollTo().performClick()
         compose.onNodeWithTag("control-channel-3").performClick()
-        compose.onNodeWithTag("control-save").performScrollTo().performClick()
+        compose.onNodeWithTag("control-save").assertIsDisplayed().performClick()
         lateinit var id: String
         compose.runOnIdle {
             val control=model().panelControls.last();id=control.id
@@ -80,13 +80,12 @@ class PanelControlsUiTest {
             assertEquals(control,RemoteViewModel(compose.activity.application).panelControls.last())
         }
         compose.onNodeWithTag("control-edit-$id").performScrollTo().performClick()
-        compose.onNodeWithTag("control-title").performTextReplacement("夹爪开关")
-        compose.onNodeWithTag("control-save").performScrollTo().performClick()
-        compose.onNodeWithTag("panel-controls-done").performScrollTo().performClick()
-        compose.onNodeWithTag("settings-done").performScrollTo().performClick()
+        compose.onNodeWithTag("control-title").performScrollTo().performTextReplacement("夹爪开关")
+        compose.onNodeWithTag("control-save").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("settings-done").assertIsDisplayed().performClick()
         compose.onNodeWithTag("control-note-$id").assertTextEquals("按住打开")
         compose.onNodeWithTag("panel-settings").performClick()
-        compose.onNodeWithTag("panel-controls-settings").performClick()
+        compose.onNodeWithTag("panel-controls-settings").performScrollTo().performClick()
         compose.onNodeWithTag("control-delete-$id").performScrollTo().performClick()
         compose.runOnIdle { assertFalse(RemoteViewModel(compose.activity.application).panelControls.any { it.id==id }) }
     }

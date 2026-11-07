@@ -204,17 +204,18 @@ class ControllerUiTest {
     }
     @Test fun gamepadSettingsCanEditSaveAndRestoreMapping() {
         compose.onNodeWithTag("panel-settings").performClick()
-        compose.onNodeWithTag("gamepad-settings").performClick()
+        compose.onNodeWithTag("gamepad-settings").performScrollTo().performClick()
         compose.onNodeWithTag("gamepad-value-X").performScrollTo().performClick()
         compose.onNodeWithTag("gamepad-value-X-option-2").performClick()
         compose.onNodeWithTag("gamepad-apply-X").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(GamepadBinding(0,2),model().gamepadBindings[GamepadButton.X]) }
-        compose.onNodeWithTag("gamepad-defaults").performScrollTo().performClick()
+        compose.onNodeWithTag("gamepad-defaults").assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(GamepadBinding(0,0),model().gamepadBindings[GamepadButton.X]) }
-        compose.onNodeWithTag("gamepad-done").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-done").performClick()
     }
     @Test fun gamepadMappingSettingsAreAvailable() {
         compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("gamepad-settings").performScrollTo().performClick()
         compose.onNodeWithText("手柄按键映射").assertExists()
     }
     @Test fun scannerRequestsLocationLikeBtMcu() {
@@ -517,10 +518,10 @@ class ControllerUiTest {
         compose.onNodeWithTag("panel-settings").performClick()
         compose.onNodeWithTag("stick-deadzone-0").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(10f) }
         compose.onNodeWithTag("stick-range-0").performScrollTo().performClick().performTextReplacement("255")
-        compose.onNodeWithTag("stick-apply-0").performScrollTo().performClick()
+        compose.onNodeWithTag("sticks-apply").assertIsDisplayed().performClick()
         compose.onNodeWithTag("stick-range-1").performScrollTo().performClick().performTextReplacement("0")
-        compose.onNodeWithTag("stick-apply-1").assertIsNotEnabled()
-        compose.onNodeWithText("完成",useUnmergedTree=true).performScrollTo().performClick()
+        compose.onNodeWithTag("sticks-apply").assertIsNotEnabled()
+        compose.onNodeWithTag("settings-done").performClick()
         compose.runOnIdle {
             model().axes(true,1000,80)
             assertEquals(255,model().controls.lx);assertEquals(0,model().controls.ly)
@@ -658,10 +659,11 @@ class ControllerUiTest {
         compose.onNodeWithTag("滑块 1").performSemanticsAction(SemanticsActions.SetProgress) { it(1000f) }
         compose.runOnIdle { assertEquals(2,model().controls.slider1) }
         compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("settings-sliders").performClick()
         compose.onNodeWithTag("slider-count-0").performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
         compose.onNodeWithTag("slider-value-0-3").performScrollTo().performTextReplacement("9")
-        compose.onNodeWithTag("slider-apply-0").performScrollTo().performClick()
-        compose.onNodeWithText("完成",useUnmergedTree=true).performScrollTo().performClick()
+        compose.onNodeWithTag("slider-apply-0").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("settings-done").performClick()
         compose.onNodeWithTag("滑块 1").performSemanticsAction(SemanticsActions.SetProgress) { it(1000f) }
         compose.runOnIdle {
             assertEquals(9,model().controls.slider1)
@@ -712,10 +714,88 @@ class ControllerUiTest {
         compose.runOnIdle { model().deletePanelControl("retained-pulse");model().disconnect() }
     }
 
+    @Test fun settingsKeepDraftAcrossCategoriesButDiscardItWhenClosed() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("stick-range-0").performScrollTo().performTextReplacement("333")
+        compose.onNodeWithTag("settings-sliders").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-sticks").performScrollTo().performClick()
+        compose.onNodeWithTag("stick-range-0").performScrollTo().assertTextContains("333")
+        compose.runOnIdle { assertEquals(1000, model().stickConfigs[0].maxValue) }
+        compose.onNodeWithTag("settings-done").performClick()
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("stick-range-0").performScrollTo().assertTextContains("1000")
+    }
+
+    @Test fun invalidRightStickBlocksBothChangesAndUndoRestoresSavedParameters() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("stick-range-0").performScrollTo().performTextReplacement("250")
+        compose.onNodeWithTag("stick-range-1").performScrollTo().performTextReplacement("0")
+        compose.onNodeWithTag("sticks-apply").assertIsDisplayed().assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(1000, model().stickConfigs[0].maxValue) }
+        compose.onNodeWithTag("sticks-reset-draft").performClick()
+        compose.onNodeWithTag("stick-range-0").performScrollTo().assertTextContains("1000")
+        compose.onNodeWithTag("stick-range-1").performScrollTo().assertTextContains("1000")
+        compose.onNodeWithTag("sticks-apply").assertIsEnabled()
+    }
+
+    @Test fun sliderDraftsRemainIndependentAndDuplicateValuesCannotBeApplied() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("settings-sliders").performScrollTo().performClick()
+        compose.onNodeWithTag("slider-value-0-1").performScrollTo().performTextReplacement("0")
+        compose.onNodeWithTag("slider-apply-0").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("slider-channel-1").performClick()
+        compose.onNodeWithTag("slider-value-1-1").performScrollTo().assertTextContains("1")
+        compose.onNodeWithTag("slider-channel-0").performClick()
+        compose.onNodeWithTag("slider-value-0-1").performScrollTo().assertTextContains("0")
+        compose.onNodeWithTag("slider-apply-0").assertIsNotEnabled()
+        compose.onNodeWithTag("slider-reset-0").performClick()
+        compose.onNodeWithTag("slider-apply-0").assertIsEnabled()
+    }
+
+    @Test fun connectionDraftSurvivesNavigationAndInvalidPortBlocksConnect() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("settings-connection").performScrollTo().performClick()
+        compose.onNodeWithTag("debug-host").performScrollTo().performTextReplacement("192.168.1.8")
+        compose.onNodeWithTag("debug-port").performScrollTo().performTextReplacement("70000")
+        compose.onNodeWithTag("debug-connect").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("settings-sticks").performScrollTo().performClick()
+        compose.onNodeWithTag("settings-connection").performScrollTo().performClick()
+        compose.onNodeWithTag("debug-host").performScrollTo().assertTextContains("192.168.1.8")
+        compose.onNodeWithTag("debug-port").performScrollTo().assertTextContains("70000")
+        compose.onNodeWithTag("debug-connect").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test fun sliderChangesInvalidateRestoredGamepadMappingDrafts() {
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("gamepad-settings").performScrollTo().performClick()
+        compose.onNodeWithTag("gamepad-value-X").performScrollTo().assertTextContains("数值 0")
+        compose.onNodeWithTag("settings-sliders").performScrollTo().performClick()
+        listOf("10", "20", "30").forEachIndexed { index, value ->
+            compose.onNodeWithTag("slider-value-0-$index").performScrollTo().performTextReplacement(value)
+        }
+        compose.onNodeWithTag("slider-apply-0").performClick()
+        compose.runOnIdle { assertEquals(GamepadBinding(0,10), model().gamepadBindings[GamepadButton.X]) }
+        compose.onNodeWithTag("gamepad-settings").performScrollTo().performClick()
+        compose.onNodeWithTag("gamepad-value-X").performScrollTo().assertTextContains("数值 10")
+        compose.onNodeWithTag("gamepad-apply-X").performScrollTo().assertIsEnabled()
+    }
+
+    @Test fun diagnosticsHaveTheirOwnCategoryAndOpeningSettingsSuspendsControls() {
+        compose.runOnIdle { model().axes(true, 800, 0); assertTrue(model().controls.lx > 0) }
+        compose.onNodeWithTag("panel-settings").performClick()
+        compose.runOnIdle { assertEquals(0, model().controls.lx); assertFalse(model().controls.enabled) }
+        compose.onNodeWithTag("diagnostics-frame").assertDoesNotExist()
+        compose.onNodeWithTag("settings-diagnostics").performScrollTo().performClick()
+        compose.onNodeWithTag("diagnostics-frame").assertExists()
+        compose.onNodeWithTag("settings-done").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("panel-settings").assertIsDisplayed()
+    }
+
     @Test fun exportActualBackgroundConnectionSettings() {
         compose.onNodeWithTag("panel-settings").performClick()
+        compose.onNodeWithTag("settings-connection").performClick()
         compose.onNodeWithTag("background-connection").assertIsOff().assertIsDisplayed()
-        compose.onNodeWithText("保留使能和当前控制值；通知中可手动断开。系统仍可能停止应用。").assertIsDisplayed()
+        compose.onNodeWithText("切到其他应用时，保留使能和当前控制值。").assertIsDisplayed()
         val image=compose.onNodeWithTag("controller-settings").captureToImage().asAndroidBitmap()
         val file=File(compose.activity.getExternalFilesDir(null),"background-settings.png")
         FileOutputStream(file).use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
