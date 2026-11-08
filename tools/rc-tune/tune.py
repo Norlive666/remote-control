@@ -118,7 +118,13 @@ def _find_variable(dwarf, symbol):
             address = _static_address(die)
             if address is not None:
                 return cu, die, address
-    raise TuneError(f"ELF 里找不到全局变量 {symbol}（需要 -g，且不能已被优化掉）")
+    raise TuneError(
+        f"ELF 里找不到全局变量 {symbol}。常见原因：\n"
+        f"  1. 固件里没真正用到它——比如驱动函数没被调用，链接器带着 --gc-sections 就把它删了；\n"
+        f"     `nm <elf> | grep -w {symbol}` 看不到符号就是这种，先把初始化/读取调用接上；\n"
+        "  2. 编译时没带 -g，或者这个变量被优化掉了；\n"
+        f"  3. 变量名不叫 {symbol}：用 --symbol 指定实际名字。"
+    )
 
 
 def _static_address(die):
