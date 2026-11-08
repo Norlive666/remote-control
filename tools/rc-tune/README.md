@@ -9,6 +9,8 @@
 - 只替换传输层：`Bt630Session` 的 `Link` 实现从 GATT 换成 HTTP（`TuneLink.kt`）；
 - 电脑端不 halt、不 reset、不擦写 Flash，只做 4 字节对齐的读改写。
 
+> 整体架构、固件侧接入、协议与排障的完整说明见 [`docs/rc-tune-guide.md`](../../docs/rc-tune-guide.md)。
+
 ```
 手机 App ──HTTP 20Hz──▶ tune.py ──GDB RSP──▶ OpenOCD ──SWD──▶ STM32  g_rc
 ```
