@@ -132,6 +132,52 @@ def test_detects_gdb_port_written_as_two_words(monkeypatch):
     assert detect_openocd_port() == 50002
 
 
+@pytest.mark.parametrize("option", ["tcl_port", "tcl port"])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_tcl_start_uses_tcl_port_without_opening_gdb(monkeypatch, tmp_path, option, explicit):
+    import start
+
+    elf = tmp_path / "firmware.elf"
+    elf.touch()
+    monkeypatch.setattr(start, "openocd_processes",
+                        lambda: [f'4242 openocd -c "gdb_port 2000" -c "{option} 2001"'])
+    monkeypatch.setattr(start, "port_open", lambda *args: pytest.fail("Tcl must not open GDB"))
+    forwarded = []
+
+    def run_tune(argv):
+        forwarded.extend(argv)
+        return 0
+
+    monkeypatch.setattr("tune.main", run_tune)
+    argv = ["--backend", "openocd-tcl", "--elf", str(elf), "--no-venv", "--read-only"]
+    if explicit:
+        argv += ["--ocd-port", "2002"]
+
+    assert start.main(argv) == 0
+    assert forwarded[forwarded.index("--backend") + 1] == "openocd-tcl"
+    assert forwarded[forwarded.index("--ocd-port") + 1] == ("2002" if explicit else "2001")
+
+
+def test_tcl_detection_requires_an_explicit_port_with_multiple_instances(monkeypatch):
+    import start
+
+    monkeypatch.setattr(start, "openocd_processes",
+                        lambda: ["4242 openocd -c tcl_port 2001", "4243 openocd"])
+
+    with pytest.raises(StartError, match="--ocd-port"):
+        start.detect_openocd_port("tcl")
+
+
+def test_tcl_start_does_not_launch_another_openocd(monkeypatch):
+    import start
+
+    monkeypatch.setattr(start, "spawn_openocd", lambda *args: pytest.fail("Tcl is attach-only"))
+    args = start.build_parser().parse_args(["--backend", "openocd-tcl", "--start-ocd", "--no-venv"])
+
+    with pytest.raises(StartError, match="--start-ocd"):
+        start.run(args)
+
+
 def test_pgrep_matches_the_exact_process_name(monkeypatch):
     import start
 

@@ -12,7 +12,7 @@
 > 整体架构、固件侧接入、协议与排障的完整说明见 [`docs/rc-tune-guide.md`](../../docs/rc-tune-guide.md)。
 
 ```
-手机 App ──HTTP 20Hz──▶ tune.py ──GDB RSP──▶ OpenOCD ──SWD──▶ STM32  g_rc
+手机 App ──HTTP 20Hz──▶ tune.py ──GDB 或 Tcl──▶ OpenOCD ──SWD──▶ STM32  g_rc
 ```
 
 电脑端默认连你已经在跑的 OpenOCD（`gdb_port`，默认 3333），不启动它、也不抢探针；
@@ -34,9 +34,9 @@ python3 tools/rc-tune/start.py --allow-write
 | 参数 | 作用 |
 |---|---|
 | `--elf build/robot.elf` | 手动指定固件 |
-| `--backend openocd` / `pyocd` | 连已有 OpenOCD（默认）或自己开探针 |
-| `--ocd-host` / `--ocd-port` | OpenOCD 的 gdb_host/gdb_port；`--ocd-port 0`（默认）会从运行中的 `openocd` 命令行自动探测，探测不到再用 3333 |
-| `--start-ocd` | 端口上没人时自己起一个 OpenOCD（`interface/stlink.cfg` + `target/stm32h7x.cfg`），退出时一并关掉 |
+| `--backend` | `openocd` 用 GDB（默认），`openocd-tcl` 与 VS Code 共用 OpenOCD，`pyocd` 直接打开探针 |
+| `--ocd-host` / `--ocd-port` | OpenOCD 地址与后端对应的端口。默认从本机进程参数探测，否则用 GDB 3333 或 Tcl 6666 |
+| `--start-ocd` | GDB 后端可在没有实例时启动 OpenOCD，退出时一并关掉。Tcl 后端只连接已有实例 |
 | `--ocd-config CFG` | 额外加载的 OpenOCD 配置，可给多次，如 `.vscode/h7-debug-unlock.cfg` |
 | `--allow-write` / `--read-only` | 跳过 / 强制关闭写入询问 |
 | `--port 8765` | 换端口 |
@@ -48,15 +48,20 @@ python3 tools/rc-tune/start.py --allow-write
 
 ### 在 VS Code 里启动
 
-`.vscode/tasks.json` 里放了四个任务，从「终端 → 运行任务…」或命令面板的
-「Tasks: Run Task」里选：
+在固件工程里按 `Ctrl+Shift+P`，选择「任务: 运行任务」或「Tasks: Run Task」。
 
 | 任务 | 用途 |
 |---|---|
+| `rc-tune: 与 Live Watch 一起启动` | F5 之后运行，自动找唯一的 ELF 和 Tcl 端口 |
+| `rc-tune: 与 Live Watch 一起启动（指定 ELF 和端口）` | 自动识别失败时，填 F5 实际加载的 ELF 和调试日志中的 Tcl 端口 |
 | `rc-tune: 启动（先只读）` | 确认链路通、看一眼 `g_rc` 当前值 |
 | `rc-tune: 启动（允许写入）` | 正式驱动 |
 | `rc-tune: 启动（指定 ELF）` | 自动找 ELF 不准时，弹框输入路径 |
 | `rc-tune: 用 pyOCD 启动` | 没有 OpenOCD，让桥接器自己占探针 |
+
+移植到其他工程时，把 `tools/rc-tune/` 放在工程根目录下。将仓库 `.vscode/tasks.json` 中两个
+「与 Live Watch 一起启动」任务和 `rcTuneElf`、`rcTuneTclPort` 两个输入项合并到该工程的同名配置。
+Linux/macOS 使用 PATH 里的 `python3`，Windows 使用 `python`。Windows 上通常需要手动填写动态分配的 Tcl 端口。
 
 这些任务**没有**占用 `Ctrl+Shift+B`（那是默认生成任务的快捷键，留给你自己的构建）。
 
@@ -82,28 +87,17 @@ Windows 在 `%APPDATA%\Code\User\keybindings.json`，Linux 在
 
 ## 和已有的 OpenOCD 共存
 
-桥接器不启动 OpenOCD，只连它的 **GDB server**（`gdb_port`），所以 OpenOCD 可以一直开着：
+在 VS Code 按 F5 启动调试，让目标继续运行。另开终端，使用 Tcl 后端启动桥接器。
 
 ```bash
-openocd -f board/stm32h7x.cfg -c "gdb_port 3333"    # 你平时那条任务
-python3 tools/rc-tune/start.py --allow-write        # 另开一个终端
+python3 tools/rc-tune/start.py --backend openocd-tcl --elf /path/to/firmware.elf --allow-write
 ```
 
-**同一个 `gdb_port` 同时只有一个 GDB 客户端**（OpenOCD 0.12 及更早；`gdb_max_connections`
-要 0.13 才有）。如果 VS Code 里正开着 Cortex-Debug/mcu-debug 的调试会话，它占着这个连接，
-桥接器再连会被 OpenOCD 立刻关掉——终端里会看到「连上了 …，但它立刻关闭了连接」，
-OpenOCD 那边则打印 `attempted 'gdb' connection rejected`。
+Live Watch 继续用 GDB，桥接器通过同一个 OpenOCD 的 `tcl_port` 读写 `g_rc`。如果自动识别失败，
+从 VS Code 调试日志查 Tcl 监听端口，在命令后加 `--ocd-port <端口号>`。手机仍连接电脑的 HTTP 端口 `8765`。
+如果重启了 VS Code 调试，需要重启桥接器以连接新的 OpenOCD。首次联调步骤见[调试链路说明](../../docs/rc-tune-guide.md#61-和-vs-code-live-watch-一起使用)。
 
-解决只要一步：**先停掉调试会话**（OpenOCD 本身不用关，也别关），再启动 rc-tune。
-调试期间想同时调参，就得让 OpenOCD 换端口重启、两边各自指过去：
-
-```bash
-openocd -f board/stm32h7x.cfg -c "gdb_port 3334"
-python3 tools/rc-tune/start.py --ocd-port 3334 --allow-write
-```
-
-只用 GDB Remote 的 `m`/`M` 两个包（按字节读写内存），目标保持运行，不 halt、不 reset。
-想退回自己占探针的方式：`--backend pyocd`。
+原有的 GDB 后端仍使用 `gdb_port`。GDB 客户端达到该目标的连接数上限时，用 Tcl 后端可共用探针。
 
 **探针类型无关**：ST-Link（`interface/stlink.cfg`）和 DAPLink（`interface/cmsis-dap.cfg`）
 都只是 OpenOCD 的 `interface`，桥接器看不到它们。老 ST-Link 若仍是 `hla_swd` 传输，
@@ -203,6 +197,5 @@ Android 侧有 `TuneLinkTest`（MockWebServer）。
 - 帧按到达顺序直接生效，不做序号过滤（App 侧本来就是递增序号）；
 - pyOCD 后端需要内置 pack（`--target stm32h723vg`）；OpenOCD 后端由你的 cfg 决定目标，
   桥接器不关心芯片型号；
-- OpenOCD 的 GDB server 同时接入的连接数有限，被调试会话占满时给 OpenOCD 换 `gdb_port`。
 - 系统 Python 升级（例如 3.14 → 3.15）后，旧的 `.venv` 会失效；`start.py` 下次运行会
   自动删掉重建，不用手动处理。

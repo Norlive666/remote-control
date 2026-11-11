@@ -97,15 +97,15 @@ def test_reads_bytes_at_address():
         probe.close()
 
 
-def test_busy_gdb_port_explains_the_single_client_limit():
+def test_busy_gdb_port_suggests_tcl_to_share_openocd():
     server = FakeGdbServer(close_immediately=True)
 
     with pytest.raises(TuneError) as raised:
         OpenOcdProbe("127.0.0.1", server.port)
 
     message = str(raised.value)
-    assert "只接受一个客户端" in message
-    assert "--ocd-port" in message
+    assert "--backend openocd-tcl" in message
+    assert "tcl_port" in message and "--ocd-port" in message
 
 
 def test_writes_bytes_and_reports_ok():

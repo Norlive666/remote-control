@@ -9,6 +9,7 @@
     python3 start.py                     # 自动找 ELF，交互询问是否允许写入
     python3 start.py --elf build/x.elf --allow-write
     python3 start.py --ocd-port 3334     # OpenOCD 的 gdb_port 不是 3333 时
+    python3 start.py --backend openocd-tcl  # 与 VS Code 调试共用 OpenOCD
     python3 start.py --backend pyocd     # 没跑 OpenOCD，让桥接器自己开探针
     python3 start.py --no-venv           # 复用当前解释器里已装的依赖
 """
@@ -36,7 +37,7 @@ ELF_MAX_DEPTH = 6
 # (pip 包名, 导入模块名)：pip 装的是 pyelftools，模块却叫 elftools。
 CORE_DEPS = (("pyelftools", "elftools"),)
 PYOCD_DEPS = (("pyocd", "pyocd"),)
-BACKENDS = ("openocd", "pyocd")
+BACKENDS = ("openocd", "openocd-tcl", "pyocd")
 
 
 class StartError(Exception):
@@ -112,14 +113,19 @@ def openocd_processes() -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def detect_openocd_port() -> int | None:
-    """从正在运行的 openocd 命令行里捡 gdb_port。
-
-    VS Code 的调试扩展会给 OpenOCD 随机分配端口，命令行里通常能看到
-    `-c "gdb_port 50001"`（0.12 起也接受 `gdb port`）；读出来就不用每次手填 --ocd-port。
-    """
-    lines = "\n".join(openocd_processes())
-    ports = [int(m) for m in re.findall(r"gdb[ _]port\s+(\d+)", lines)]
+def detect_openocd_port(kind: str = "gdb") -> int | None:
+    """从 OpenOCD 进程参数找端口，兼容 gdb_port / gdb port 等两种写法。"""
+    processes = openocd_processes()
+    if kind == "tcl":
+        if len(processes) > 1:
+            raise StartError("有多个 OpenOCD 实例，请从 VS Code 调试日志确认 tcl_port，再用 --ocd-port 指定。")
+        values = re.findall(r"\btcl[ _]port\s+(\d+|disabled)\b", "\n".join(processes))
+        if not values:
+            return None
+        if values[-1] in ("0", "disabled"):
+            raise StartError("未能确定 Tcl 监听端口。请检查 VS Code 调试日志并用 --ocd-port 指定可用的 tcl_port。")
+        return int(values[-1])
+    ports = [int(m) for m in re.findall(r"gdb[ _]port\s+(\d+)", "\n".join(processes))]
     ports = [port for port in ports if port > 0]
     return ports[0] if ports else None
 
@@ -356,13 +362,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--elf", help="固件 ELF（不填则自动在当前目录递归找唯一的 .elf）")
     parser.add_argument("--symbol", default="g_rc", help="结构体变量名，默认 g_rc")
     parser.add_argument("--backend", choices=BACKENDS, default="openocd",
-                        help="openocd：连已运行的 OpenOCD（默认，不抢探针）；pyocd：自己打开探针")
-    parser.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD 的 gdb_host，默认 127.0.0.1")
+                        help="openocd：用 GDB（默认），openocd-tcl：与 VS Code 共用 OpenOCD，pyocd：自己打开探针")
+    parser.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD 主机，默认 127.0.0.1")
     parser.add_argument(
         "--ocd-port",
         type=int,
         default=0,
-        help="OpenOCD 的 gdb_port；0 表示自动探测运行中的 openocd，探测不到再用 3333",
+        help="OpenOCD 的 gdb_port / tcl_port；0 表示自动探测，探测不到再用 3333 / 6666",
     )
     parser.add_argument("--start-ocd", action="store_true",
                         help="端口上没人时自己起一个 OpenOCD（退出时关闭），用于真正的一键启动")
@@ -386,6 +392,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.backend == "openocd-tcl" and args.start_ocd:
+        raise StartError("openocd-tcl 只连接已有实例，请先在 VS Code 启动调试并去掉 --start-ocd。")
     if not args.no_venv and not running_in_venv():
         return relaunch(ensure_venv(args.index_url, args.backend))
     if not args.no_venv and missing_deps(Path(sys.executable), args.backend):
@@ -397,7 +405,11 @@ def run(args: argparse.Namespace) -> int:
         raise StartError(f"ELF 不存在：{elf}")
 
     spawned = False
-    if args.backend == "openocd":
+    if args.backend == "openocd-tcl":
+        if not args.ocd_port and args.ocd_host in ("127.0.0.1", "localhost", "::1"):
+            args.ocd_port = detect_openocd_port("tcl")
+        args.ocd_port = args.ocd_port or 6666
+    elif args.backend == "openocd":
         args.ocd_port = args.ocd_port or detect_openocd_port() or 3333
         if port_open(args.ocd_host, args.ocd_port):
             print(f"探测到运行中的 OpenOCD，gdb_port = {args.ocd_port}（不对就用 --ocd-port 指定）")
@@ -441,6 +453,8 @@ def run(args: argparse.Namespace) -> int:
     if args.backend == "openocd":
         how = "脚本启动，退出时关闭" if spawned else "连已有实例，不抢探针"
         print(f"链路    OpenOCD {args.ocd_host}:{args.ocd_port}（{how}）")
+    elif args.backend == "openocd-tcl":
+        print(f"链路    OpenOCD Tcl {args.ocd_host}:{args.ocd_port}（tcl_port）")
     else:
         print(f"链路    pyOCD {args.target}")
     if os.name == "nt":

@@ -684,11 +684,9 @@ class RspClient:
             self.close()
             if not self._received:
                 raise TuneError(
-                    f"连上了 {host}:{port}，但它立刻关闭了连接。\n"
-                    "OpenOCD 0.12 及更早的 gdb_port 同一时间只接受一个客户端，"
-                    "多半是 Cortex-Debug/mcu-debug 的调试会话还连着。\n"
-                    "把调试会话停掉（OpenOCD 本身不用关）再启动 rc-tune；"
-                    "或者用 --ocd-port 指到另一个 gdb_port。\n"
+                    f"连上了 {host}:{port}，但 OpenOCD 的 GDB 握手没有完成。\n"
+                    "确认 --ocd-port 指向 gdb_port。若调试会话已占满 GDB 连接，"
+                    "可用 --backend openocd-tcl，并将 --ocd-port 指向同一实例的 tcl_port。\n"
                     f"（原始错误：{exc}）"
                 ) from exc
             raise
@@ -819,13 +817,92 @@ class OpenOcdProbe:
         self.rsp.close()
 
 
-def open_probe(backend="openocd", target=None, unique_id=None, ocd_host="127.0.0.1", ocd_port=3333):
+class OpenOcdTclProbe:
+    """用已运行的 OpenOCD Tcl RPC 读写 RAM，与 GDB 共用探针。"""
+
+    CHUNK_SIZE = 512
+    MAX_REPLY = 4096
+    END = b"\x1a"
+
+    def __init__(self, host, port, timeout=2.0):
+        try:
+            self.sock = socket.create_connection((host, port), timeout=timeout)
+        except OSError as exc:
+            raise TuneError(
+                f"连不上 OpenOCD Tcl（{host}:{port}）：{exc}\n"
+                "请先在 VS Code 启动调试，再用 --ocd-port 指定日志中的 tcl_port。"
+            ) from exc
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            if "Open On-Chip Debugger" not in self._request("capture {version}"):
+                raise TuneError("版本应答异常")
+        except (TuneError, OSError) as exc:
+            self.close()
+            raise TuneError(
+                f"OpenOCD Tcl 握手失败（{host}:{port}）：{exc}\n"
+                "请确认 --ocd-port 指向 tcl_port。"
+            ) from exc
+
+    def _request(self, command):
+        # Tcl RPC 只返回求值结果。用 catch 区分命令失败和成功的空结果。
+        script = (
+            f"if {{[catch {{{command}}} rc_tune_result]}} "
+            "{format {rc-tune-error %s} $rc_tune_result} "
+            "else {format {rc-tune-ok %s} $rc_tune_result}"
+        )
+        reply = bytearray()
+        try:
+            self.sock.sendall(script.encode("ascii") + self.END)
+            while self.END not in reply:
+                data = self.sock.recv(self.MAX_REPLY)
+                if not data:
+                    raise OSError("OpenOCD 已关闭连接")
+                reply.extend(data)
+                if len(reply) > self.MAX_REPLY:
+                    raise OSError("Tcl 应答过长")
+            status, _, result = reply.split(self.END, 1)[0].decode("utf-8", "replace").partition(" ")
+            if status == "rc-tune-ok":
+                return result
+            if status != "rc-tune-error":
+                raise OSError("Tcl 应答格式不符")
+        except OSError as exc:
+            self.close()
+            raise TuneError(f"OpenOCD Tcl 连接不可用：{exc}。请确认调试会话运行中，再重启桥接器。") from exc
+        raise TuneError(f"OpenOCD Tcl 命令失败：{result or command}")
+
+    def read(self, address, size):
+        data = bytearray()
+        for offset in range(0, size, self.CHUNK_SIZE):
+            count = min(self.CHUNK_SIZE, size - offset)
+            reply = self._request(f"read_memory 0x{address + offset:x} 8 {count}")
+            values = reply.split()
+            if len(values) != count:
+                raise TuneError(f"OpenOCD Tcl 读取长度不符：{len(values)} != {count}")
+            try:
+                data.extend(bytes(int(value, 0) for value in values))
+            except ValueError as exc:
+                raise TuneError("OpenOCD Tcl 读取结果包含非法字节") from exc
+        return bytes(data)
+
+    def write(self, address, data):
+        for offset in range(0, len(data), self.CHUNK_SIZE):
+            chunk = data[offset:offset + self.CHUNK_SIZE]
+            values = " ".join(f"0x{value:02x}" for value in chunk)
+            self._request(f"write_memory 0x{address + offset:x} 8 {{{values}}}")
+
+    def close(self):
+        self.sock.close()
+
+
+def open_probe(backend="openocd", target=None, unique_id=None, ocd_host="127.0.0.1", ocd_port=None):
+    if backend == "openocd-tcl":
+        return OpenOcdTclProbe(ocd_host, 6666 if ocd_port is None else ocd_port)
     if backend == "openocd":
         # OpenOCD 刚起来时可能还留着上一个探测连接，重试几次再放弃。
         deadline = time.monotonic() + 2.0
         while True:
             try:
-                return OpenOcdProbe(ocd_host, ocd_port)
+                return OpenOcdProbe(ocd_host, 3333 if ocd_port is None else ocd_port)
             except TuneError:
                 if time.monotonic() >= deadline:
                     raise
@@ -872,10 +949,10 @@ def main(argv=None):
     serve = sub.add_parser("serve", help="启动 HTTP 桥接器，等待 App 连接")
     serve.add_argument("--elf", required=True, help="带 -g 的固件 ELF")
     serve.add_argument("--symbol", default="g_rc", help="全局结构体名（默认 g_rc）")
-    serve.add_argument("--backend", choices=("openocd", "pyocd"), default="openocd",
-                       help="调试后端：openocd（连已运行的 OpenOCD，默认）或 pyocd（自己占探针）")
-    serve.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD gdb_host（默认 127.0.0.1）")
-    serve.add_argument("--ocd-port", type=int, default=3333, help="OpenOCD gdb_port（默认 3333）")
+    serve.add_argument("--backend", choices=("openocd", "openocd-tcl", "pyocd"), default="openocd",
+                       help="OpenOCD GDB（默认）、OpenOCD Tcl（可与 GDB 并行）、pyOCD")
+    serve.add_argument("--ocd-host", default="127.0.0.1", help="OpenOCD 主机（默认 127.0.0.1）")
+    serve.add_argument("--ocd-port", type=int, help="OpenOCD gdb_port（默认 3333）或 tcl_port（默认 6666）")
     serve.add_argument("--target", default="stm32h723vg", help="pyOCD 目标名，仅 --backend pyocd 时使用")
     serve.add_argument("--probe", default=None, help="探针 UID（多个探针时用）")
     serve.add_argument("--host", default="0.0.0.0", help="监听地址（默认 0.0.0.0）")
@@ -921,17 +998,25 @@ def _cmd_serve(args):
     if args.watchdog_ms < 50:
         raise TuneError("--watchdog-ms 不能小于 50")
 
+    if args.ocd_port is None:
+        args.ocd_port = 6666 if args.backend == "openocd-tcl" else 3333
     probe = open_probe(args.backend, args.target, args.probe, args.ocd_host, args.ocd_port)
     bridge = Bridge(layout, probe, write_enabled=args.allow_write, watchdog=args.watchdog_ms / 1000)
     token = args.token or None
 
-    current = bridge.read_state()
+    try:
+        current = bridge.read_state()
+    except Exception:
+        bridge.close()
+        raise
     spans = ", ".join(f"{m.id}" for m in layout.members[:6])
     print(f"结构体   {layout.symbol} @0x{layout.address:08X}，{layout.size} 字节，{classify_region(layout.address)}")
     print(f"成员     {spans} …")
     print(f"当前值   {', '.join(f'{k}={v}' for k, v in list(current.items())[:6])}")
     if args.backend == "openocd":
         print(f"链路     OpenOCD {args.ocd_host}:{args.ocd_port}（连已有实例，不抢探针）")
+    elif args.backend == "openocd-tcl":
+        print(f"链路     OpenOCD Tcl {args.ocd_host}:{args.ocd_port}（与 GDB 共用 OpenOCD）")
     else:
         print(f"链路     pyOCD {args.target}{' · ' + args.probe if args.probe else ''}")
     print(f"写入     {'已开启（--allow-write）' if args.allow_write else '只读（加 --allow-write 才能写）'}")
@@ -946,6 +1031,7 @@ def _cmd_serve(args):
     try:
         httpd = ThreadingHTTPServer((args.host, args.port), make_handler(bridge, token))
     except OSError as exc:
+        bridge.close()
         raise TuneError(f"监听 {args.host}:{args.port} 失败：{exc}\n端口被占用时，先关掉上一个桥接器窗口再启动。") from exc
     httpd.daemon_threads = True
     bridge.start_watchdog()

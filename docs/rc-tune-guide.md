@@ -1,7 +1,8 @@
 # rc-tune 调试链路说明
 
 手机 App 用**和蓝牙完全相同的 20 字节控制帧**，经局域网 HTTP 交给电脑上的 Python 桥接器；
-桥接器通过 OpenOCD 的 GDB 调试通道（GDB RSP）直接读写 STM32 RAM 里的 `g_rc` 结构体。
+桥接器通过 OpenOCD 的 GDB 或 Tcl 通道直接读写 STM32 RAM 里的 `g_rc` 结构体。
+和 VS Code Live Watch 同时使用时，桥接器用 Tcl，VS Code 用 GDB，两者共用同一个 OpenOCD 和探针。
 
 不经过串口，不需要在固件里加通信代码，App 侧的摇杆/滑块/使能/急停逻辑完全复用。
 
@@ -11,10 +12,10 @@
 
 ```
  手机 App（Android）              电脑                                 STM32H7 固件
-┌───────────────────┐  HTTP   ┌────────────────┐  GDB RSP  ┌──────────┐  SWD   ┌──────────┐
-│ RemoteViewModel   │ 20 Hz   │ tune.py        │  m/M 包   │ OpenOCD  │        │ g_rc     │
+┌───────────────────┐  HTTP   ┌────────────────┐  GDB/Tcl  ┌──────────┐  SWD   ┌──────────┐
+│ RemoteViewModel   │ 20 Hz   │ tune.py        │           │ OpenOCD  │        │ g_rc     │
 │ Bt630Session.Link │────────▶│  ├ DWARF 解析   │──────────▶│ gdb_port │───────▶│ (RAM)    │
-│  └ TuneLink       │◀────────│  ├ HTTP 服务    │◀──────────│ 3333 …   │◀───────│ 28 字节   │
+│  └ TuneLink       │◀────────│  ├ HTTP 服务    │◀──────────│ tcl_port │◀───────│ 28 字节   │
 │ ControlProtocol   │  JSON   │  └ 看门狗       │           └──────────┘        └──────────┘
 └───────────────────┘         └───────▲────────┘
                                       │ 启动/参数
@@ -26,7 +27,7 @@
 | 连接段 | 协议 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | App → 桥接器 | HTTP/1.1 | 8765 | 局域网直连，JSON + 二进制帧 |
-| 桥接器 → OpenOCD | GDB RSP | `gdb_port` | 只发 `m`（读）/ `M`（写）两个包 |
+| 桥接器 → OpenOCD | GDB RSP / Tcl RPC | 3333 / 6666 | GDB 用 `m` 和 `M`，Tcl 用 `read_memory` 和 `write_memory` |
 | OpenOCD → 芯片 | SWD | 探针 | ST-Link / DAPLink 都行，由 interface cfg 决定 |
 
 ---
@@ -157,7 +158,7 @@ axes = 0, sliders = 0, enabled = 0, stopped = 1, link_valid = 0
 - **虚拟环境**：首次运行自动建 `tools/rc-tune/.venv` 并装 `pyelftools`；
   解释器失效（比如系统 Python 升级导致 `libpython3.14.so` 找不到）会自动删掉重建。
 - **找 ELF**：不带 `--elf` 时在当前目录递归找唯一的 `.elf`；找到多个会报错，用 `--elf` 指定。
-- **找 OpenOCD**：`pgrep` 读已有 OpenOCD 的 `gdb_port`（支持 `gdb_port 3333` 和 `gdb port 3333` 两种写法）。
+- **找 OpenOCD**：有 `pgrep` 时从已有进程的参数查找对应后端的端口，兼容下划线和空格写法（如 `tcl_port 2001` 和 `tcl port 2001`）。
 - **起 OpenOCD**：加 `--start-ocd` 且没有实例时自己拉起，退出时自动关闭；
   探针接口从 `.vscode/launch.json`（其次 `tasks.json`）识别，`stlink.cfg` 起不来会回退 `cmsis-dap.cfg`。
 
@@ -167,9 +168,9 @@ axes = 0, sliders = 0, enabled = 0, stopped = 1, link_valid = 0
 | --- | --- | --- |
 | `--elf <路径>` | 自动发现 | 固件 ELF |
 | `--symbol <名字>` | `g_rc` | 要调的结构体变量 |
-| `--backend openocd\|pyocd` | openocd | 调试后端 |
-| `--ocd-host` / `--ocd-port` | 127.0.0.1 / 自动 | OpenOCD 的 gdb 地址与端口（0 = 从进程命令行探测） |
-| `--start-ocd` | 关 | 没有实例时自己启动 OpenOCD |
+| `--backend` | `openocd` | `openocd` 用 GDB，`openocd-tcl` 用 Tcl，`pyocd` 直接打开探针 |
+| `--ocd-host` / `--ocd-port` | 127.0.0.1 / 自动 | OpenOCD 地址与后端对应的端口（0 = 从本机进程参数探测） |
+| `--start-ocd` | 关 | GDB 后端可在没有实例时启动 OpenOCD，Tcl 后端只连接已有实例 |
 | `--ocd-config <cfg>` | — | 额外的 `-f` 配置文件，可重复 |
 | `--interface <名字>` | 自动 | 探针接口，如 `stlink` / `cmsis-dap` |
 | `--host` / `--port` | 0.0.0.0 / 8765 | HTTP 监听地址与端口 |
@@ -240,23 +241,22 @@ interface Link {
 5. **验证**：App 显示「已写入 N 帧 · 回读一致」；桥接器终端每帧回执。
 6. **退出**：直接停任务即可；App 会补发急停，桥接器断流也会写安全值。
 
-### 6.1 OpenOCD 只能带一个 GDB 客户端（重要）
+### 6.1 和 VS Code Live Watch 一起使用
 
-OpenOCD 0.12 及更早版本，同一个 `gdb_port` **同时只接受一个客户端**。
-如果 VS Code 的调试会话（Cortex-Debug / mcu-debug）已经连着，桥接器再连会立刻被踢：
-
-```
-Error: attempted 'gdb' connection rejected
-```
-
-桥接器的提示是「连上了 127.0.0.1:2000，但它立刻关闭了连接」。
-
-解决：**先停调试会话**（Shift+F5，OpenOCD 本身不用关），或者让 OpenOCD 换一个端口：
+1. 在 VS Code 按 F5，等程序启动后继续运行。在 Live Watch 中添加 `g_rc.sequence`。
+2. 按 `Ctrl+Shift+P`，选择「任务: 运行任务」→「rc-tune: 与 Live Watch 一起启动」。
+   如果工作区里有多个 ELF 或需要手动指定 Tcl 端口，选「rc-tune: 与 Live Watch 一起启动（指定 ELF 和端口）」。
+   移植到新工程的步骤见 [VS Code 任务说明](../tools/rc-tune/README.md#在-vs-code-里启动)。
+   也可以在固件工程目录运行下面的命令，把 ELF 路径换成这次 F5 实际加载的文件。
 
 ```bash
-openocd ... -c "gdb_port 3334"
-tools/rc-tune/start.sh --ocd-port 3334 --allow-write
+sh /path/to/remote-control/tools/rc-tune/start.sh --backend openocd-tcl \
+  --elf build/Debug/Gimbal.elf --allow-write
 ```
+
+3. 如果端口未识别或同时开了多个调试会话，查看 VS Code 调试日志的 `tcl_port` 或 `Listening on port … for tcl connections`，在命令后加上 `--ocd-port` 和该端口号。没有指定端口且无法自动识别时，脚本尝试 OpenOCD 默认的 Tcl 端口 `6666`。手机仍连接桥接器的 HTTP 端口 `8765`，Tcl 端口留在本机。
+4. 架空机器人，保持手机端使能关闭，连接 App 的「调试链路」。检查 App 显示回读一致，同时观察 Live Watch 的 `g_rc.sequence` 是否更新。
+5. 退出时先关闭 App 使能，再退出桥接器并停止 VS Code 调试。F5 重新启动调试后，重启桥接器以连接新会话。如果 OpenOCD 意外退出，桥接器会报告读写失败，已断开的探针无法补写安全值。
 
 ---
 
@@ -278,7 +278,8 @@ tools/rc-tune/start.sh --ocd-port 3334 --allow-write
 | --- | --- | --- |
 | `ELF 里找不到全局变量 g_rc` | 变量被 `--gc-sections` 回收，或没带 `-g` | 在入口真引用一次 `g_rc`，`nm <elf> \| grep -w g_rc` 确认；或 `--symbol` 指定名字 |
 | `ELF 不存在：…` | 工程里有多个/零个 `.elf` | 用 `--elf build/Debug/xxx.elf` |
-| `连上了 … 但它立刻关闭了连接` | `gdb_port` 已被调试会话占用 | 停调试会话，或换 `gdb_port` + `--ocd-port` |
+| `GDB 握手没有完成` / `attempted 'gdb' connection rejected` | GDB 连接已满或端口选错 | 与 VS Code 并行时用 `--backend openocd-tcl`，确认端口是 `tcl_port` |
+| `连不上 OpenOCD Tcl` / `OpenOCD Tcl 握手失败` | VS Code 调试还未启动、Tcl 未监听或端口选错 | 先按 F5，在调试日志找到 Tcl 监听端口，用 `--ocd-port` 指定 |
 | `Error: open failed` | 探针接口选错（ST-Link 用 cmsis-dap.cfg）或被占用 | `--interface cmsis-dap` 或反过来；检查 `lsusb` |
 | `监听 …:8765 失败` | 上一个桥接器没关 | 关掉旧窗口/进程再启动 |
 | `libpython3.14.so.1.0: cannot open` | 虚拟环境随系统 Python 升级失效 | 删掉 `tools/rc-tune/.venv` 重跑，脚本也会自动重建 |

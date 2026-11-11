@@ -2,6 +2,38 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "rc-tune: 与 Live Watch 一起启动",
+      "detail": "先用 F5 启动 OpenOCD。自动找唯一的 ELF 和 Tcl 端口，允许 App 写入 g_rc",
+      "type": "process",
+      "command": "python3",
+      "windows": { "command": "python" },
+      "args": [
+        "${workspaceFolder}/tools/rc-tune/start.py",
+        "--backend", "openocd-tcl",
+        "--allow-write"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true }
+    },
+    {
+      "label": "rc-tune: 与 Live Watch 一起启动（指定 ELF 和端口）",
+      "detail": "自动识别失败时使用，端口填 F5 日志中的 tcl_port，允许 App 写入 g_rc",
+      "type": "process",
+      "command": "python3",
+      "windows": { "command": "python" },
+      "args": [
+        "${workspaceFolder}/tools/rc-tune/start.py",
+        "--backend", "openocd-tcl",
+        "--elf", "${input:rcTuneElf}",
+        "--ocd-port", "${input:rcTuneTclPort}",
+        "--allow-write"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true }
+    },
+    {
       "label": "rc-tune: 启动（先只读）",
       "detail": "连已运行的 OpenOCD（gdb_port 3333），自动找 ELF，开 HTTP 桥接器；用命令面板的「Tasks: Run Task」启动",
       "type": "shell",
@@ -103,6 +135,17 @@
     }
   ],
   "inputs": [
+    {
+      "id": "rcTuneElf",
+      "type": "promptString",
+      "description": "本次 F5 加载的 ELF 路径（相对工程根目录或绝对路径）"
+    },
+    {
+      "id": "rcTuneTclPort",
+      "type": "promptString",
+      "description": "F5 日志中的 Tcl 监听端口（0 表示自动识别）",
+      "default": "0"
+    },
     {
       "id": "elfPath",
       "type": "promptString",
