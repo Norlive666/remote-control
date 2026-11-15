@@ -34,50 +34,46 @@
 
 ## 2. 固件侧
 
-### 2.1 只需要一个结构体
+### 2.1 接入 STM32H723 固件
 
-固件里不需要任何通信驱动、串口中断或定时器，只需要一个全局变量：
+把 [remote_control.c](../stm32/h723/remote_control.c) 和 [remote_control.h](../stm32/h723/remote_control.h)
+加入 H723 HAL 工程。驱动提供一份 `g_rc` 定义和 `RC_GetState()`。原来使用独立 `rc_state.h`
+的工程，切换到驱动头文件时同时移除原 `g_rc` 定义和旧的状态读取函数。
 
-```c
-/* Core/Src/main.c */
-#include "rc_state.h"
+如果只通过 SWD 写入，启动时在控制任务运行前调用一次 `RC_Reset()`，让初始状态为停止并保留 `g_rc`。
+这条路径只使用驱动的状态接口。若工程已通过 `RC_Init(baud)` 启用 BT630，可直接复用该驱动的
+`g_rc`。蓝牙和 SWD 写同一个状态，测试 SWD 时请断开手机的 BLE 连接。
 
-/* used    : 即使暂时没有代码读它，也强制编译器保留；
- * aligned : 32 字节对齐，读之前才能整行刷 D-Cache。 */
-__attribute__((used, aligned(32))) volatile RC_State_t g_rc = {0};
-```
-
-`User/APP/rc_state.h` 提供类型、`extern` 声明和一个读取封装：
+在业务代码中读取状态。
 
 ```c
+#include "remote_control.h"
+
 RC_State_t rc;
-RC_GetState(&rc);              /* 内部先 SCB_InvalidateDCache_by_Addr，再拷贝 */
-if (rc.enabled && !rc.stopped) {
+RC_GetState(&rc);
+if (rc.link_valid && rc.enabled && !rc.stopped) {
     /* rc.axes[0..3] / rc.sliders[0..3] */
 }
 ```
 
-### 2.2 为什么 `used` 还不够
+### 2.2 确认 ELF 保留了 `g_rc`
 
-链接器开了 `--gc-sections`（CubeMX 默认），**没人引用的变量会被整段删掉**，
-哪怕它标了 `__attribute__((used))`。所以入口里必须真的读一次：
-
-```c
-(void)g_rc.sequence;   /* volatile 读是副作用，编译器删不掉 → 链接器必须保留 g_rc */
-```
-
-验证：
+编译保留 DWARF 调试信息的 ELF，并让 rc-tune 使用与实际烧录固件对应的版本。
+`RC_Reset()` 或 `RC_Init(baud)` 会引用 `g_rc`。自行定义状态的工程也需要实际引用它，
+否则链接器的 `--gc-sections` 可能将其回收。
 
 ```bash
-nm build/Debug/Gimbal.elf | grep -w g_rc
-# 200040c0 B g_rc        ← 有这一行，桥接器才找得到
+arm-none-eabi-nm -S --defined-only build/Debug/Gimbal.elf
 ```
 
-### 2.3 为什么必须刷 D-Cache
+在输出中查找 `g_rc`，以本次构建显示的地址为准。
+
+### 2.3 H723 的 RAM 和 D-Cache
 
 桥接器是**调试器经 SWD 直接改 RAM**，这条路径不经过 CPU 缓存。
-STM32H7 的 D-Cache 如果开着，CPU 可能一直读到旧值。
-`RC_GetState()` 在读之前把 `g_rc` 所在缓存行整行失效（32 字节对齐就是为了这一步安全）。
+H723 的 `g_rc` 可放在探针可访问的 DTCM，例如 Vela_Gimbal 把 `.bss` 放在 DTCM。
+如果把它放在启用 D-Cache 的可缓存 SRAM，需为该状态使用非缓存区或处理缓存一致性。
+探针回读一致仅表示 RAM 读回了预期值，业务仍需验证 CPU 实际读取的状态。
 
 ### 2.4 内存布局（与桥接器、App 三方一致）
 
@@ -286,7 +282,7 @@ sh /path/to/remote-control/tools/rc-tune/start.sh --backend openocd-tcl \
 | 401 `令牌错误` | 桥接器开了 `--token` | App 里填同样的令牌，或去掉 `--token` |
 | 403 `只读模式` | 桥接器没开写 | 加 `--allow-write` |
 | 422 `CRC 校验失败` | 帧内容坏了 | 检查 App 版本与协议版本 |
-| `写入未生效` / `verified=false` | D-Cache | 固件用 `RC_GetState()` 读 |
+| 探针回读一致，固件仍读到旧值 | `g_rc` 在启用 D-Cache 的可缓存 SRAM | 检查链接地址和 MPU，H723 可使用探针能访问的 DTCM |
 | `控制流中断` 频繁出现 | 帧率不足 / 调试通道慢 | 看回执里的 `ms`；确认 20 Hz 正常 |
 | 手机连不上 | 不在同一网段 / 防火墙 | 放行 8765，或用 `--host 0.0.0.0` 并检查 IP |
 
@@ -297,21 +293,23 @@ sh /path/to/remote-control/tools/rc-tune/start.sh --backend openocd-tcl \
 ```
 remote-control/
 ├── android/                     手机 App（含 TuneLink、DebugLinkSettings）
-├── stm32/h723/                  驱动参考实现（本方案不需要它）
+├── stm32/h723/                  H723 驱动，提供 g_rc 和状态接口
+├── .vscode/tasks.json           可复制到固件工程的 VS Code 任务
 ├── tools/rc-tune/
 │   ├── start.py                 一键入口
 │   ├── tune.py                  桥接器核心
 │   ├── tests/                   单元测试
 │   └── README.md                快速上手
-├── docs/rc-tune-guide.md        本文
-└── dist/rc-tune-kit/            可直接拷进固件工程的独立包
+└── docs/rc-tune-guide.md        本文
 ```
 
-固件工程侧（如 Vela_Gimbal）只需要：
+在固件工程中加入驱动并合并启动任务，然后编译该工程的 ELF。
 
 ```
 <工程>/
-├── User/APP/rc_state.h          结构体定义 + RC_GetState()
-├── Core/Src/main.c              g_rc 定义与保留
-└── .vscode/tasks.json           一键启动任务（来自 kit）
+├── User/APP/remote_control.c    g_rc 定义与驱动
+├── User/APP/remote_control.h    状态类型和接口
+├── Core/Src/main.c              调用 RC_Reset() 或 RC_Init(baud)
+├── tools/rc-tune/               电脑端桥接器
+└── .vscode/tasks.json           合并 VS Code 启动任务
 ```
