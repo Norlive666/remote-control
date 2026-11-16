@@ -201,6 +201,8 @@ def test_openocd_args_include_configs_and_port(monkeypatch, tmp_path):
     from start import openocd_args
 
     monkeypatch.chdir(tmp_path)
+    (tmp_path / ".vscode").mkdir()
+    (tmp_path / ".vscode" / "h7-debug-unlock.cfg").write_text("")
 
     args = openocd_args(3333, [".vscode/h7-debug-unlock.cfg"])
 
@@ -210,6 +212,18 @@ def test_openocd_args_include_configs_and_port(monkeypatch, tmp_path):
     assert "target/stm32h7x.cfg" in args
     assert ".vscode/h7-debug-unlock.cfg" in args
     assert args[-1] == "gdb_port 3333"
+
+
+def test_openocd_args_skip_a_missing_local_config(monkeypatch, tmp_path, capsys):
+    from start import openocd_args
+
+    monkeypatch.chdir(tmp_path)
+
+    args = openocd_args(3333, [".vscode/not-here.cfg"])
+
+    assert ".vscode/not-here.cfg" not in args
+    assert args.count("-f") == 2  # 只剩 interface + target
+    assert "跳过不存在的 OpenOCD 配置" in capsys.readouterr().out
 
 
 def test_port_open_sees_listening_socket():

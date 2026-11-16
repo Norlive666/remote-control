@@ -181,12 +181,26 @@ def port_open(host: str, port: int, timeout: float = 0.3) -> bool:
         return False
 
 
+def _looks_like_local_path(config: str) -> bool:
+    """`interface/stlink.cfg` 是 OpenOCD 自带的；`.vscode/x.cfg`、`/abs/x.cfg`、`C:\\x.cfg` 才是本地文件。"""
+    return config.startswith((".", "/", "\\")) or (
+        len(config) > 1 and config[1] == ":"
+    )
+
+
 def openocd_args(
     port: int, extra_configs: list[str], interface: str = DEFAULT_INTERFACE
 ) -> list[str]:
-    """组一条 `openocd -f …`：先按当前目录找配置，再带上用户追加的 cfg。"""
+    """组一条 `openocd -f …`：先按当前目录找配置，再带上用户追加的 cfg。
+
+    本地 cfg 不存在就跳过——Windows 上解压时经常漏掉 `.vscode` 这类点目录，
+    让 OpenOCD 自己报 `Can't find ...` 不如这里先说清楚。
+    """
     args = ["-s", str(Path.cwd())]
     for config in (interface, TARGET_CONFIG, *extra_configs):
+        if _looks_like_local_path(config) and not Path(config).is_file():
+            print(f"跳过不存在的 OpenOCD 配置：{config}", flush=True)
+            continue
         args += ["-f", config]
     args += ["-c", f"gdb_port {port}"]
     return args
@@ -403,6 +417,11 @@ def run(args: argparse.Namespace) -> int:
     elf = Path(args.elf).expanduser().resolve() if args.elf else find_elf(Path.cwd())
     if not elf.is_file():
         raise StartError(f"ELF 不存在：{elf}")
+
+    if not args.ocd_config:
+        default_cfg = Path(".vscode/h7-debug-unlock.cfg")
+        if default_cfg.is_file():
+            args.ocd_config = [".vscode/h7-debug-unlock.cfg"]
 
     spawned = False
     if args.backend == "openocd-tcl":

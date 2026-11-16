@@ -5,10 +5,9 @@
       "label": "rc-tune: 与 Live Watch 一起启动",
       "detail": "先用 F5 启动 OpenOCD。自动找唯一的 ELF 和 Tcl 端口，允许 App 写入 g_rc",
       "type": "process",
-      "command": "python3",
-      "windows": { "command": "python" },
+      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "windows": { "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat" },
       "args": [
-        "${workspaceFolder}/tools/rc-tune/start.py",
         "--backend", "openocd-tcl",
         "--allow-write"
       ],
@@ -20,10 +19,9 @@
       "label": "rc-tune: 与 Live Watch 一起启动（指定 ELF 和端口）",
       "detail": "自动识别失败时使用，端口填 F5 日志中的 tcl_port，允许 App 写入 g_rc",
       "type": "process",
-      "command": "python3",
-      "windows": { "command": "python" },
+      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "windows": { "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat" },
       "args": [
-        "${workspaceFolder}/tools/rc-tune/start.py",
         "--backend", "openocd-tcl",
         "--elf", "${input:rcTuneElf}",
         "--ocd-port", "${input:rcTuneTclPort}",

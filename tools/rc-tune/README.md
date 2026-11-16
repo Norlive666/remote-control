@@ -26,6 +26,12 @@ Windows 双击 `start.bat`，Linux/macOS 执行 `./start.sh`，等价于：
 python3 tools/rc-tune/start.py --allow-write
 ```
 
+Windows 上没有 Python（或 `py` 启动器指向了已卸载的解释器）时，`start.bat` 会依次尝试
+`tools\rc-tune\python\python.exe`（便携版）、`python`、`py -3`、`python3`，全都不可用才报错。
+不想装 Python 的话，下载一个便携版（例如 python-build-standalone 的 Windows `install_only`
+压缩包），解压到 `tools/rc-tune/python/`，保证存在 `tools/rc-tune/python/python.exe` 即可；
+pyelftools 仍然由脚本自己装进 `.venv`。
+
 **先按你平时的任务把 OpenOCD 起起来**（桥接器只连它，不改它）。首次运行会自动在
 本目录建 `.venv` 并按后端装依赖：OpenOCD 后端只要 `pyelftools`（约 0.2 MB），
 `--backend pyocd` 才需要 15 MB 的 pyocd。然后在当前目录下递归找唯一的 `.elf`（跳过 `.git`、`.venv`、
