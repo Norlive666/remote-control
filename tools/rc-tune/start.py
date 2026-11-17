@@ -159,12 +159,12 @@ def _command_lines() -> list[str]:
 
 def _is_openocd(line: str) -> bool:
     """按可执行文件名精确匹配——用 `pgrep -af openocd` 会连 start.py 自己一起匹配上。"""
-    parts = line.split()
-    if not parts:
+    # 兼容带 PID 的进程列表，以及 Windows 上带空格的双引号路径。
+    match = re.match(r'^\s*(?:\d+\s+)?(?:"([^"]+)"|(\S+))', line)
+    if not match:
         return False
-    # `ps` 只给命令行；`pgrep` 会带一列 pid，两种都接受。
-    executable = parts[1] if parts[0].isdigit() and len(parts) > 1 else parts[0]
-    name = executable.strip('"').replace("\\", "/").rsplit("/", 1)[-1].lower()
+    executable = match.group(1) or match.group(2)
+    name = executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return name in {"openocd", "openocd.exe"}
 
 

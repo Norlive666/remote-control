@@ -180,6 +180,15 @@ def test_openocd_processes_match_only_the_executable():
     assert not _is_openocd('')
 
 
+def test_detects_tcl_port_for_quoted_openocd_path_with_spaces(monkeypatch):
+    import start
+
+    line = r'"C:\Program Files\OpenOCD\bin\openocd.exe" -c "tcl_port 50001"'
+    monkeypatch.setattr(start, "_command_lines", lambda: [line])
+
+    assert start.detect_openocd_port("tcl") == 50001
+
+
 def test_openocd_args_include_configs_and_port(monkeypatch, tmp_path):
     from start import openocd_args
 
