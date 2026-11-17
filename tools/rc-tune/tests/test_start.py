@@ -361,3 +361,53 @@ def test_venv_that_cannot_execute_is_kept(monkeypatch, tmp_path):
         start.ensure_venv(None, "openocd")
 
     assert python.exists()
+
+
+def test_openocd_path_can_come_from_the_flag(monkeypatch, tmp_path):
+    import start
+
+    fake = tmp_path / "openocd.exe"
+    fake.write_text("")
+    seen = {}
+
+    class Proc:
+        pass
+
+    def fake_popen(argv):
+        seen["argv"] = argv
+        return Proc()
+
+    monkeypatch.setattr("start.subprocess.Popen", fake_popen)
+
+    start.spawn_openocd(3333, [], exe=str(fake))
+
+    assert seen["argv"][0] == str(fake)
+
+
+def test_openocd_path_can_come_from_the_environment(monkeypatch, tmp_path):
+    import start
+
+    fake = tmp_path / "openocd"
+    fake.write_text("")
+    seen = {}
+
+    def fake_popen(argv):
+        seen["argv"] = argv
+        return object()
+
+    monkeypatch.setenv("RC_TUNE_OPENOCD", str(fake))
+    monkeypatch.setattr("start.subprocess.Popen", fake_popen)
+
+    start.spawn_openocd(3333, [])
+
+    assert seen["argv"][0] == str(fake)
+
+
+def test_missing_openocd_mentions_the_flag(monkeypatch):
+    import start
+
+    monkeypatch.delenv("RC_TUNE_OPENOCD", raising=False)
+    monkeypatch.setattr("start.shutil.which", lambda name: None)
+
+    with pytest.raises(StartError, match="--openocd"):
+        start.resolve_openocd()

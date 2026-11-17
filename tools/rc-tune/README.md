@@ -42,6 +42,7 @@ pyelftools 仍然由脚本自己装进 `.venv`。
 | `--elf build/robot.elf` | 手动指定固件 |
 | `--backend` | `openocd` 用 GDB（默认），`openocd-tcl` 与 VS Code 共用 OpenOCD，`pyocd` 直接打开探针 |
 | `--ocd-host` / `--ocd-port` | OpenOCD 地址与后端对应的端口。默认从本机进程参数探测，否则用 GDB 3333 或 Tcl 6666 |
+| `--openocd PATH` | openocd 不在 PATH 里时指定可执行文件；也可设环境变量 `RC_TUNE_OPENOCD` |
 | `--start-ocd` | GDB 后端可在没有实例时启动 OpenOCD，退出时一并关掉。Tcl 后端只连接已有实例 |
 | `--ocd-config CFG` | 额外加载的 OpenOCD 配置，可给多次，如 `.vscode/h7-debug-unlock.cfg` |
 | `--allow-write` / `--read-only` | 跳过 / 强制关闭写入询问 |

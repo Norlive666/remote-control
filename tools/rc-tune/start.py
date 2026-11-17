@@ -288,16 +288,35 @@ def openocd_args(
     return args
 
 
+def resolve_openocd(exe: str | None = None) -> str:
+    """找 openocd 可执行文件：--openocd 参数 → RC_TUNE_OPENOCD 环境变量 → PATH。"""
+    candidate = exe or os.environ.get("RC_TUNE_OPENOCD")
+    if candidate:
+        found = shutil.which(candidate) or (candidate if Path(candidate).is_file() else None)
+        if found is None:
+            raise StartError(f"指定的 openocd 不存在：{candidate}")
+        return found
+    found = shutil.which("openocd")
+    if found is None:
+        raise StartError(
+            "找不到 openocd：PATH 里没有，也没有指定路径。三个办法：\n"
+            "  1. 用 --openocd \"C:\\Tools\\openocd\\bin\\openocd.exe\" 指定，"
+            "或设环境变量 RC_TUNE_OPENOCD；\n"
+            "  2. 先在 VS Code 里 F5 起调试，再用 --backend openocd-tcl 连它的 tcl_port（不用 --start-ocd）；\n"
+            "  3. 把 openocd 所在的 bin 目录加进 PATH。"
+        )
+    return found
+
+
 def spawn_openocd(
     port: int,
     extra_configs: list[str],
     interface: str = DEFAULT_INTERFACE,
     root: Path | None = None,
+    exe: str | None = None,
 ) -> subprocess.Popen:
     """没有现成的 OpenOCD 时自己起一个；输出留在同一个终端里，方便看探针报错。"""
-    exe = shutil.which("openocd")
-    if exe is None:
-        raise StartError("PATH 里找不到 openocd；先装上，或者去掉 --start-ocd、自己启动 OpenOCD。")
+    exe = resolve_openocd(exe)
     argv = [exe, *openocd_args(port, extra_configs, interface, root)]
     print(f"启动 OpenOCD（探针 {interface}）：{' '.join(argv)}", flush=True)
     return subprocess.Popen(argv)
@@ -480,6 +499,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--start-ocd", action="store_true",
                         help="端口上没人时自己起一个 OpenOCD（退出时关闭），用于真正的一键启动")
+    parser.add_argument("--openocd", default=None, metavar="PATH",
+                        help="openocd 可执行文件；不在 PATH 里时用这个指定（也可设 RC_TUNE_OPENOCD）")
     parser.add_argument("--ocd-config", action="append", default=[], metavar="CFG",
                         help="额外加载的 OpenOCD 配置，可给多次，如 .vscode/h7-debug-unlock.cfg")
     parser.add_argument("--interface", default=None, metavar="NAME",
@@ -544,7 +565,7 @@ def run(args: argparse.Namespace) -> int:
                         candidates.append(other)
             last_error: StartError | None = None
             for index, config in enumerate(candidates):
-                proc = spawn_openocd(args.ocd_port, args.ocd_config, config, root)
+                proc = spawn_openocd(args.ocd_port, args.ocd_config, config, root, args.openocd)
                 try:
                     wait_for_port(proc, args.ocd_host, args.ocd_port)
                 except StartError as exc:
