@@ -1,0 +1,27 @@
+{
+  "name": "rc-tune",
+  "displayName": "rc-tune for MCU AI Debug",
+  "description": "Start the phone SWD bridge using the current MCU AI Debug OpenOCD session.",
+  "version": "0.1.1",
+  "publisher": "Norlive666",
+  "license": "MIT",
+  "engines": { "vscode": "^1.107.0" },
+  "repository": { "type": "git", "url": "https://github.com/Norlive666/remote-control.git", "directory": "vscode/rc-tune" },
+  "categories": ["Debuggers"],
+  "main": "./extension.js",
+  "files": ["extension.js", "bridge/", "LICENSE"],
+  "extensionKind": ["workspace"],
+  "extensionDependencies": ["Runzelee.mcu-ai-debug"],
+  "activationEvents": ["onDebugResolve:mcu-debug"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false },
+    "virtualWorkspaces": { "supported": false }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "rcTune.start", "title": "启动手机调试链路", "category": "rc-tune" },
+      { "command": "rcTune.stop", "title": "停止手机调试链路", "category": "rc-tune" },
+      { "command": "rcTune.connectionInfo", "title": "查看手机连接参数", "category": "rc-tune" }
+    ]
+  }
+}

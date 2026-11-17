@@ -14,7 +14,7 @@ v1.12.0 将横屏设置页整理为六个分类：连接与后台、摇杆参数
 
 当前驱动仅保留H723＋BT630；v4.0.0统一为带波特率参数的 `RC_Init(baud)`，升级时需同步修改调用。UART8 版见 [当前驱动源码](stm32/h723/)。旧版 USART3 驱动包见 [v4.0.0 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)。
 
-通过 DAPLink 或 ST-Link 调试时，手机可经局域网和电脑上的 rc-tune 写入 STM32 的 `g_rc`。VS Code 的 Live Watch 可继续通过同一个 OpenOCD 查看变量。用法、VS Code 任务和 H723 固件接入见 [rc-tune 调试链路说明](docs/rc-tune-guide.md)。
+通过 DAPLink 或 ST-Link 调试时，手机可经局域网和 VS Code 的 rc-tune 扩展写入 STM32 的 `g_rc`。Live Watch 可继续通过同一个 OpenOCD 查看变量。下载安装包后按 F5 进入调试，再点击状态栏的「rc-tune」。[下载 Windows / Linux VSIX](https://github.com/Norlive666/remote-control/releases/tag/rc-tune-v0.1.1) · [H723 固件接入与使用说明](docs/rc-tune-guide.md)
 
 BT630 移植、接线/反相、手机配置和常见错误排查见 [BT630 移植与排障指南](docs/bt630-porting.md)，包含 `BLE 写入失败 -5` 与 UART/定时器分频的区别。
 

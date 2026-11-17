@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
+import os
 import socket
 import struct
 import sys
@@ -448,6 +449,8 @@ class Bridge:
 
     def read_state(self):
         with self.lock:
+            if self.closed:
+                raise TuneError("调试链路已停止")
             return self._read_locked()
 
     def apply_frame(self, data):
@@ -466,8 +469,10 @@ class Bridge:
         # 先记「收到活帧」再读写：一帧在 SWD 上偶尔要几百毫秒，
         # 如果等写完再刷新时间戳，看门狗会把它误判成断流。
         self.last_frame = self.clock()
-        self.armed = True
         with self.lock:
+            if self.closed:
+                raise TuneError("调试链路已停止")
+            self.armed = True
             self._write_locked(written)
             observed = self._read_locked()
             # 在锁内再刷一次：看门狗等锁期间，这一帧已经写完了。
@@ -495,7 +500,7 @@ class Bridge:
             return False
         with self.lock:
             # 等锁期间可能刚好有帧写完，进来再确认一次。
-            if not self.armed or self.clock() - self.last_frame <= self.watchdog:
+            if self.closed or not self.armed or self.clock() - self.last_frame <= self.watchdog:
                 return False
             self._write_locked(NEUTRAL)
             self.armed = False
@@ -535,9 +540,16 @@ class Bridge:
             "members": [member.to_dict() for member in self.layout.members],
         }
 
-    def close(self):
-        self.closed = True
-        self.probe.close()
+    def close(self, safe_stop=False):
+        with self.lock:
+            if self.closed:
+                return
+            self.closed = True
+            try:
+                if safe_stop and self.armed:
+                    self._write_locked(NEUTRAL)
+            finally:
+                self.probe.close()
 
     def _read_locked(self):
         raw = self.probe.read(self.layout.address, self.layout.size)
@@ -974,6 +986,7 @@ def main(argv=None):
     )
     serve.add_argument("--no-token", action="store_true", help=argparse.SUPPRESS)
     serve.add_argument("--watchdog-ms", type=int, default=300, help="断流多久后写安全值（默认 300）")
+    serve.add_argument("--stdio-lifecycle", action="store_true", help=argparse.SUPPRESS)
     serve.set_defaults(handler=_cmd_serve)
 
     args = parser.parse_args(argv)
@@ -1044,13 +1057,23 @@ def _cmd_serve(args):
         raise TuneError(f"监听 {args.host}:{args.port} 失败：{exc}\n端口被占用时，先关掉上一个桥接器窗口再启动。") from exc
     httpd.daemon_threads = True
     bridge.start_watchdog()
+    if args.stdio_lifecycle:
+        def stop_at_eof():
+            os.read(sys.stdin.fileno(), 1)
+            httpd.shutdown()
+
+        threading.Thread(target=stop_at_eof, daemon=True, name="rc-tune-stdin").start()
+        print(f"RC_TUNE_READY {httpd.server_port}", flush=True)
     try:
         httpd.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:
         print("\n已停止")
     finally:
         httpd.server_close()
-        bridge.close()
+        try:
+            bridge.close(safe_stop=args.stdio_lifecycle)
+        except Exception as exc:
+            raise TuneError(f"调试链路已停止，无法写入停止状态：{exc}") from exc
     return 0
 
 

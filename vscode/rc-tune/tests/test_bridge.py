@@ -7,7 +7,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from frames import make_frame
-from tune import Bridge, FrameError, Member, StructLayout, WriteDisabled, make_handler
+from tune import Bridge, FrameError, Member, StructLayout, TuneError, WriteDisabled, make_handler
 
 BASE = 0x20000000
 
@@ -72,6 +72,20 @@ def test_stop_frame_clears_output_and_sets_stop_flag():
     raw = probe.read(BASE, 20)
     assert raw[0:8] == bytes(8)
     assert (raw[16], raw[17], raw[19]) == (0, 1, 1)
+
+
+def test_extension_stop_clears_active_controls_and_refuses_late_frames():
+    probe = FakeProbe()
+    bridge = Bridge(g_rc_layout(), probe, write_enabled=True)
+    bridge.apply_frame(make_frame(axes=(100, 0, 0, 0)))
+
+    bridge.close(safe_stop=True)
+
+    assert probe.mem[:8] == bytes(8)
+    assert (probe.mem[16], probe.mem[17], probe.mem[19]) == (0, 1, 0)
+    with pytest.raises(TuneError, match="已停止"):
+        bridge.apply_frame(make_frame())
+    assert probe.writes == 2
 
 
 def test_read_only_bridge_refuses_writes():
