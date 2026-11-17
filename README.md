@@ -12,7 +12,7 @@ v1.12.2 将设置页改为主窗口内的页面，不再创建独立全屏弹窗
 
 v1.12.0 将横屏设置页整理为六个分类：连接与后台、摇杆参数、滑块档位、自定义控件、手柄映射、通信诊断。参数区独立滚动，应用按钮固定在底部；切换分类保留草稿，关闭设置丢弃未应用的输入。修改滑块档位后，手柄映射页会同步显示校正后的值。主操控面板、蓝牙通信和 STM32 协议沿用原有行为。
 
-当前驱动仅保留H723＋BT630；v4.0.0统一为带波特率参数的 `RC_Init(baud)`，升级时需同步修改调用。驱动源码包：[H723＋BT630 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)。
+当前驱动仅保留H723＋BT630；v4.0.0统一为带波特率参数的 `RC_Init(baud)`，升级时需同步修改调用。UART8 版见 [当前驱动源码](stm32/h723/)。旧版 USART3 驱动包见 [v4.0.0 的 `.c/.h` 与协议文档](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)。
 
 通过 DAPLink 或 ST-Link 调试时，手机可经局域网和电脑上的 rc-tune 写入 STM32 的 `g_rc`。VS Code 的 Live Watch 可继续通过同一个 OpenOCD 查看变量。用法、VS Code 任务和 H723 固件接入见 [rc-tune 调试链路说明](docs/rc-tune-guide.md)。
 
@@ -82,7 +82,7 @@ HAL_Init();
 SystemClock_Config();
 /* 保留已有 MX_DMA_Init()/MX_USARTx_UART_Init() 等调用，先完成全部外设初始化。 */
 if (RC_Init(115200U) != HAL_OK) Error_Handler(); /* 显式指定UART波特率 */
-/* H723默认接收反相=1，适用于本板D-Bus接口；直接PD9须改为0。 */
+/* PE0 直连 BT630，使用默认的 RC_RX_INVERT=0。 */
 
 RC_State_t state;
 RC_GetState(&state);
@@ -91,9 +91,9 @@ if (state.link_valid && state.enabled && !state.stopped) {
 }
 ```
 
-H723：USART3，PD8 TX → 模块 RX、PD9 RX ← 模块 TX，TIM5。两端共地，UART 电平3.3V，模块供电按模块规格。驱动自动初始化对应GPIO、USART、定时器和NVIC，无需CubeMX配置或生成uart.c/tim.c，无需UART/TIM HAL模块。基础HAL/RCC（H723包括RCCEx）、启动文件和系统时钟仍由原工程提供。
+H723 驱动使用 UART8 和 TIM5。PE1 TX 接模块 RX，PE0 RX 接模块 TX，两个引脚均为 AF8。两端共地，UART 使用 3.3V 逻辑，供电按模块规格。驱动自动初始化 GPIO、UART、定时器和 NVIC，基础 HAL/RCC（H723 包括 RCCEx）、启动文件和系统时钟由工程提供。
 
-v2.2.0允许保留CubeMX生成文件及目标UART初始化：只要尚未启动其他DMA/中断收发，随后调用Init即可；活动收发和占用的定时器仍返回HAL_BUSY，保留原状态。成功后UART由本驱动独占，不要再次初始化或用于其他业务。v4.0.0统一为 `RC_Init(uint32_t baud)`，波特率通过参数显式传入；升级时同时替换`.c/.h`并修改旧初始化调用，原默认波特率宏不再使用。H723的 `RC_RX_INVERT` 默认1，与本机实测D-Bus接口配置一致，直接连接PD9时改为0。已有生成IRQ入口无需修改，H723原USART1/TIM4不由本驱动占用。完整顺序、配置和接线见[接入文档](docs/stm32.md)。
+CubeMX 生成的 UART8 初始化可以保留。若已启动其他 DMA 或中断收发，或 TIM5 已被占用，`RC_Init()` 返回 `HAL_BUSY`。初始化成功后 UART8 由驱动独占。波特率通过 `RC_Init(uint32_t baud)` 显式传入，直连默认关闭接收反相。完整顺序、配置和接线见 [接入文档](docs/stm32.md)。
 
 ## 协议和构建
 

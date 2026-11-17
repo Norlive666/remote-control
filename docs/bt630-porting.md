@@ -7,7 +7,7 @@
 ## 1. 下载与通信链路
 
 - [Android APK v1.9.0](https://github.com/Norlive666/remote-control/releases/download/v1.9.0/remote-control-v1.9.0.apk)：Android 8.0 及以上。
-- [STM32 驱动包 v4.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)：仅保留H723＋BT630的 `.c/.h`。
+- [STM32 驱动包 v4.0.0](https://github.com/Norlive666/remote-control/releases/download/stm32-v4.0.0/remote-control-stm32-v4.0.0.zip)：归档版本使用 USART3（PD8/PD9）；UART8 版请使用仓库源码。
 - 仓库源码：[H723](../stm32/h723/)。
 
 ```text
@@ -49,20 +49,14 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 
 ## 3. 接线、反相与固定外设
 
-| 驱动目录 / 芯片 | MCU 接收：模块 TXD → | MCU 发送：→ 模块 RXD | 占用定时器 | 发布包接收极性 |
+| 驱动目录 / 芯片 | MCU 接收：模块 TXD → | MCU 发送：→ 模块 RXD | 占用定时器 | 当前源码默认接收极性 |
 | --- | --- | --- | --- | --- |
-| `stm32/h723/`，STM32H723VGT6 | PD9，USART3 RX，AF7 | PD8，USART3 TX，AF7 | TIM5 | `RC_RX_INVERT=1` |
+| `stm32/h723/`，STM32H723VGT6 | PE0，UART8 RX，AF8 | PE1，UART8 TX，AF8 | TIM5 | `RC_RX_INVERT=0` |
 
 两端必须共地。UART 使用兼容的 3.3V 逻辑，供电按裸模块或转接板的实际规格。仅接收手机控制数据时，模块 TXD → MCU RX 和共地是必要信号连接；本驱动不主动通过 MCU TX 回传确认。要从 MCU 向模块发 AT 命令，则还需发送通路和相应程序。
 
-**H723 默认反相是为本项目实测板的接口电路设置的，不是 BT630 自身要求。**
-
-| H723 的实际信号路径 | `remote_control.h` 设置 |
-| --- | --- |
-| BT630 TXD 直接接芯片 PD9，无反相器件 | `#define RC_RX_INVERT 0` |
-| 本项目实测板：TXD → CN14 第 3 脚 → R28/Q5 → PD9，信号被反相一次 | `#define RC_RX_INVERT 1`，发布包默认 |
-
-该实测板 CN14 第 1 脚为 GND；其他板卡必须对照自己的原理图。普通 UART 在模块 TXD 处空闲为高，经本板 Q5 后 PD9 空闲为低。万用表只能辅助看静态电平，不能判断字节、波特率和帧格式；这些需要示波器或逻辑分析仪。
+BT630 TXD 直连 PE0 时使用正常极性，保持 `RC_RX_INVERT=0`；只有实际线路经过一级反相时才设为 1。
+普通 UART 的模块 TXD 空闲为高。万用表只能辅助看静态电平，字节、波特率和帧格式需用示波器或逻辑分析仪检查。
 
 ## 4. 在新 HAL 工程中接入
 
@@ -70,11 +64,11 @@ App 的“已连接”和写入成功，只说明手机侧 BLE 流程完成，�
 
 1. 将 `stm32/h723/` 的 `remote_control.c`、`remote_control.h` 复制到工程；把 `.c` 加入构建、头文件目录加入搜索路径。
 2. 工程提供正确的芯片 HAL、CMSIS、启动文件、链接脚本、`HAL_Init()` 和 `SystemClock_Config()`；H723 需要基础 RCC/RCCEx 支持。
-3. 按接线设置头文件中的接收反相；H723 直连 PD9 时设为0。波特率通过 `RC_Init(baud)` 显式传入，标准115200配置使用 `RC_Init(115200U)`。
+3. 按接线设置头文件中的接收反相；H723 直连 PE0 时设为 0。波特率通过 `RC_Init(baud)` 显式传入，标准115200配置使用 `RC_Init(115200U)`。
 
 ```c
 /* 对应 stm32/h723/remote_control.h 中的配置。 */
-#define RC_RX_INVERT 1 /* 经本板Q5为1，普通直连为0。 */
+#define RC_RX_INVERT 0 /* 普通直连为 0，经一级反相为 1。 */
 ```
 
 也可通过编译器参数全局覆盖配置，但必须对 `remote_control.c` 的编译生效。只在 `main.c` 中定义宏，不能改变另一个编译单元的配置。
@@ -233,7 +227,7 @@ BRR = round(软件计算的 UART 时钟 / 指定波特率)
 实际波特率 ≈ 硬件实际 UART 时钟 / BRR
 ```
 
-H723 USART3 的时钟由自己的内核时钟选择决定，不能直接拿 CPU 主频代替。若实际振荡源、`HSE_VALUE`、PLL/分频或所取的 USART 时钟与软件计算不一致，修改波特率参数有可能偶然补偿错误比例。应修正时钟认知，再恢复与模块一致的目标波特率。[ST H723 参考手册 RM0468，USART 与 RCC 章节](https://www.st.com/resource/en/reference_manual/dm00603761.pdf)
+H723 UART8 的时钟由其内核时钟选择决定，不能直接拿 CPU 主频代替。若实际振荡源、`HSE_VALUE`、PLL/分频或所取的 USART 时钟与软件计算不一致，修改波特率参数有可能偶然补偿错误比例。应修正时钟认知，再恢复与模块一致的目标波特率。[ST H723 参考手册 RM0468，USART 与 RCC 章节](https://www.st.com/resource/en/reference_manual/dm00603761.pdf)
 
 例如仅在 UART 内核实际为 120 MHz 且配置如上时，115200 对应 BRR 约 1042；相同条件下 BRR=2000 则约为 60000 bit/s。这个示例不是所有开发板的应填数值。`BRR` 是分频编码，不能套用定时器的 `PSC+1` 规则。
 

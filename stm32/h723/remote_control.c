@@ -144,16 +144,16 @@ static uint32_t timer_clock(void) {
     return pclk*4u;
 }
 static int occupied(void) {
-    if (RCC->APB1LENR & RCC_APB1LENR_USART3EN) {
-        if (USART3->CR1 & (USART_CR1_IDLEIE|USART_CR1_RXNEIE_RXFNEIE|USART_CR1_TCIE|
+    if (RCC->APB1LENR & RCC_APB1LENR_UART8EN) {
+        if (UART8->CR1 & (USART_CR1_IDLEIE|USART_CR1_RXNEIE_RXFNEIE|USART_CR1_TCIE|
                           USART_CR1_TXEIE_TXFNFIE|USART_CR1_PEIE|USART_CR1_CMIE|
                           USART_CR1_RTOIE|USART_CR1_EOBIE|USART_CR1_TXFEIE|USART_CR1_RXFFIE)) return 1;
-        if (USART3->CR2 & USART_CR2_LBDIE) return 1;
-        if (USART3->CR3 & (USART_CR3_EIE|USART_CR3_DMAR|USART_CR3_DMAT|USART_CR3_CTSIE|
+        if (UART8->CR2 & USART_CR2_LBDIE) return 1;
+        if (UART8->CR3 & (USART_CR3_EIE|USART_CR3_DMAR|USART_CR3_DMAT|USART_CR3_CTSIE|
                           USART_CR3_WUFIE|USART_CR3_TXFTIE|USART_CR3_TCBGTIE|USART_CR3_RXFTIE)) return 1;
-        if ((USART3->CR1 & (USART_CR1_UE|USART_CR1_TE))==(USART_CR1_UE|USART_CR1_TE) &&
-            !(USART3->ISR & USART_ISR_TC)) return 1;
-    } else if (NVIC_GetEnableIRQ(USART3_IRQn)) return 1;
+        if ((UART8->CR1 & (USART_CR1_UE|USART_CR1_TE))==(USART_CR1_UE|USART_CR1_TE) &&
+            !(UART8->ISR & USART_ISR_TC)) return 1;
+    } else if (NVIC_GetEnableIRQ(UART8_IRQn)) return 1;
     if (RCC->APB1LENR & RCC_APB1LENR_TIM5EN) return 1;
     return NVIC_GetEnableIRQ(TIM5_IRQn);
 }
@@ -161,7 +161,7 @@ static void install_vectors(void) {
     const uint32_t *original=(const uint32_t *)(uintptr_t)SCB->VTOR;
     unsigned i;
     for (i=0;i<RC_VECTOR_COUNT;i++) vectors[i]=original[i];
-    vectors[16u+USART3_IRQn]=(uint32_t)(uintptr_t)uart_irq;
+    vectors[16u+UART8_IRQn]=(uint32_t)(uintptr_t)uart_irq;
     vectors[16u+TIM5_IRQn]=(uint32_t)(uintptr_t)timer_irq;
     if (SCB->CCR & SCB_CCR_DC_Msk) SCB_CleanDCache_by_Addr(vectors,(int32_t)sizeof(vectors));
     __DSB();
@@ -186,39 +186,39 @@ HAL_StatusTypeDef RC_Init(uint32_t baud) {
     period=(clock+divisor*500u)/(divisor*1000u);
     if (period==0 || period>65536u) { unlock(key); return HAL_ERROR; }
 
-    __HAL_RCC_GPIOD_CLK_ENABLE(); __HAL_RCC_USART3_CLK_ENABLE(); __HAL_RCC_TIM5_CLK_ENABLE();
-    MODIFY_REG(GPIOD->OTYPER,(1u<<8)|(1u<<9),0);
-    MODIFY_REG(GPIOD->OSPEEDR,15u<<16,0);
-    MODIFY_REG(GPIOD->PUPDR,15u<<16,4u<<16); /* RX pull-up, TX no pull. */
-    MODIFY_REG(GPIOD->AFR[1],0xffu,0x77u); /* AF7 on PD8/PD9. */
-    MODIFY_REG(GPIOD->MODER,15u<<16,10u<<16);
-    USART3->CR1=0; USART3->CR2=RC_RX_INVERT ? USART_CR2_RXINV : 0; USART3->CR3=0;
-    USART3->PRESC=0;
-    USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
-    USART3->RQR=USART_RQR_RXFRQ;
-    USART3->BRR=brr;
+    __HAL_RCC_GPIOE_CLK_ENABLE(); __HAL_RCC_UART8_CLK_ENABLE(); __HAL_RCC_TIM5_CLK_ENABLE();
+    MODIFY_REG(GPIOE->OTYPER,3u,0);
+    MODIFY_REG(GPIOE->OSPEEDR,15u,0);
+    MODIFY_REG(GPIOE->PUPDR,15u,1u); /* PE0 RX pull-up, PE1 TX no pull. */
+    MODIFY_REG(GPIOE->AFR[0],0xffu,0x88u); /* AF8 on PE0/PE1. */
+    MODIFY_REG(GPIOE->MODER,15u,10u);
+    UART8->CR1=0; UART8->CR2=RC_RX_INVERT ? USART_CR2_RXINV : 0; UART8->CR3=0;
+    UART8->PRESC=0;
+    UART8->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
+    UART8->RQR=USART_RQR_RXFRQ;
+    UART8->BRR=brr;
     TIM5->CR1=0; TIM5->CR2=0; TIM5->SMCR=0; TIM5->DIER=0; TIM5->CCER=0;
     TIM5->PSC=divisor-1u; TIM5->ARR=period-1u;
     TIM5->EGR=TIM_EGR_UG; TIM5->SR=0; TIM5->CNT=0;
     RC_Reset();
     install_vectors();
-    NVIC_ClearPendingIRQ(USART3_IRQn); NVIC_ClearPendingIRQ(TIM5_IRQn);
-    NVIC_SetPriority(USART3_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
+    NVIC_ClearPendingIRQ(UART8_IRQn); NVIC_ClearPendingIRQ(TIM5_IRQn);
+    NVIC_SetPriority(UART8_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
     NVIC_SetPriority(TIM5_IRQn,NVIC_EncodePriority(NVIC_GetPriorityGrouping(),5,0));
-    USART3->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE_RXFNEIE;
+    UART8->CR1=USART_CR1_UE|USART_CR1_TE|USART_CR1_RE|USART_CR1_RXNEIE_RXFNEIE;
     TIM5->DIER=TIM_DIER_UIE; TIM5->CR1=TIM_CR1_CEN;
     initialized_baud=baud;
-    NVIC_EnableIRQ(USART3_IRQn); NVIC_EnableIRQ(TIM5_IRQn);
+    NVIC_EnableIRQ(UART8_IRQn); NVIC_EnableIRQ(TIM5_IRQn);
     unlock(key);
     return HAL_OK;
 }
 static void uart_irq(void) {
-    uint32_t isr=USART3->ISR;
+    uint32_t isr=UART8->ISR;
     if (isr & USART_ISR_RXNE_RXFNE) {
-        uint8_t data=(uint8_t)USART3->RDR;
+        uint8_t data=(uint8_t)UART8->RDR;
         if (!(isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE))) RC_ProcessByte(data);
     }
-    if (isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE)) USART3->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
+    if (isr & (USART_ISR_ORE|USART_ISR_FE|USART_ISR_NE|USART_ISR_PE)) UART8->ICR=USART_ICR_ORECF|USART_ICR_FECF|USART_ICR_NECF|USART_ICR_PECF;
 }
 static void timer_irq(void) {
     if ((TIM5->SR & TIM_SR_UIF) && (TIM5->DIER & TIM_DIER_UIE)) {

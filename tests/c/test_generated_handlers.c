@@ -1,7 +1,7 @@
 /* Link fixture: generated strong IRQs must coexist; only RCC HAL is supplied. */
 #include <stddef.h>
 #include "stm32h7xx_hal.h"
-void USART3_IRQHandler(void) {}
+void UART8_IRQHandler(void) {}
 void TIM5_IRQHandler(void) {}
 void USART1_IRQHandler(void) {}
 void TIM4_IRQHandler(void) {}

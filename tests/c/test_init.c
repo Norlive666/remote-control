@@ -5,13 +5,13 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#define TEST_UART USART3
+#define TEST_UART UART8
 #define TEST_TIMER TIM5
-#define TEST_GPIO GPIOD
-#define TEST_UART_IRQn USART3_IRQn
+#define TEST_GPIO GPIOE
+#define TEST_UART_IRQn UART8_IRQn
 #define TEST_TIMER_IRQn TIM5_IRQn
 #define TEST_UART_ENR RCC->APB1LENR
-#define TEST_UART_EN RCC_APB1LENR_USART3EN
+#define TEST_UART_EN RCC_APB1LENR_UART8EN
 
 SCB_Type test_scb;
 uint32_t test_primask, test_enabled[163], test_priority[163], test_cache_cleans;
@@ -30,7 +30,7 @@ uint32_t HAL_RCCEx_GetPeriphCLKFreq(uint64_t peripheral) {
     return 0;
 }
 /* Strong generated handlers must coexist, but successful Init installs private handlers. */
-void USART3_IRQHandler(void) { assert(0 && "generated UART3 handler used"); }
+void UART8_IRQHandler(void) { assert(0 && "generated UART8 handler used"); }
 void TIM5_IRQHandler(void) { assert(0 && "generated timer5 handler used"); }
 void USART1_IRQHandler(void) { assert(0 && "generated UART handler used"); }
 void TIM4_IRQHandler(void) { assert(0 && "generated timer handler used"); }
@@ -130,6 +130,7 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[1],"baud-115200")) {
         assert(RC_Init(115200U)==HAL_OK);
         assert(TEST_UART->BRR==313); /* 36 MHz / 115200, rounded. */
+        assert(TEST_UART->CR2==0); /* Default polarity for a direct PE0 connection. */
     } else if (!strcmp(argv[1],"baud-120000")) {
         pclk1=120000000;
         assert(RC_Init(120000U)==HAL_OK);
@@ -171,9 +172,11 @@ int main(int argc, char **argv) {
         uint32_t source=RCC->D2CCIP2R;
         if (!strcmp(argv[1],"old-peripherals")) {
             RCC->APB2ENR=RCC_APB2ENR_USART1EN;
-            RCC->APB1LENR=RCC_APB1LENR_TIM4EN;
+            RCC->APB1LENR=RCC_APB1LENR_TIM4EN|RCC_APB1LENR_USART3EN;
             USART1->BRR=0x1234; TIM4->PSC=0x5678; GPIOA->MODER=0x12345678;
+            USART3->BRR=0x2345; USART3->CR3=USART_CR3_DMAR; GPIOD->MODER=0x87654321;
             test_enabled[USART1_IRQn]=test_enabled[TIM4_IRQn]=1;
+            test_enabled[USART3_IRQn]=1;
         }
         int bt630=!strcmp(argv[1],"bt630");
         uint32_t baud=bt630 ? 115200 : 9600;
@@ -188,7 +191,7 @@ int main(int argc, char **argv) {
             test_enabled[TEST_UART_IRQn]=!strcmp(argv[1],"reuse-uart-irq");
         }
         TEST_GPIO->ODR=0xffff;
-        TEST_GPIO->MODER=TEST_GPIO->PUPDR=TEST_GPIO->AFR[1]=0xffffffff;
+        TEST_GPIO->MODER=TEST_GPIO->PUPDR=TEST_GPIO->AFR[0]=0xffffffff;
         assert(RC_Init(baud)==HAL_OK);
         assert(test_primask==expected_primask && g_rc.valid_frames==0 && !g_rc.link_valid);
         assert(SCB->VTOR!=original);
@@ -201,15 +204,17 @@ int main(int argc, char **argv) {
         assert(TEST_UART->CR2==0);
 #endif
         assert(RCC->D2CCIP2R==source); /* Shared kernel clock selection is preserved. */
-        assert((TEST_GPIO->MODER & (15u<<16))==(10u<<16));
-        assert((TEST_GPIO->AFR[1] & 0xff)==0x77);
-        assert((TEST_GPIO->PUPDR & (15u<<16))==(4u<<16));
+        assert(TEST_GPIO->MODER==0xfffffffau);
+        assert(TEST_GPIO->AFR[0]==0xffffff88u);
+        assert(TEST_GPIO->PUPDR==0xfffffff1u);
         assert(test_cache_cleans==(uint32_t)cache);
-        assert(RCC->AHB4ENR & RCC_AHB4ENR_GPIODEN);
-        assert((RCC->APB1LENR & (RCC_APB1LENR_USART3EN|RCC_APB1LENR_TIM5EN))==(RCC_APB1LENR_USART3EN|RCC_APB1LENR_TIM5EN));
+        assert(RCC->AHB4ENR & RCC_AHB4ENR_GPIOEEN);
+        assert((RCC->APB1LENR & (TEST_UART_EN|RCC_APB1LENR_TIM5EN))==(TEST_UART_EN|RCC_APB1LENR_TIM5EN));
         if (!strcmp(argv[1],"old-peripherals")) {
             assert(USART1->BRR==0x1234 && TIM4->PSC==0x5678 && GPIOA->MODER==0x12345678);
             assert(test_enabled[USART1_IRQn] && test_enabled[TIM4_IRQn]);
+            assert(USART3->BRR==0x2345 && USART3->CR3==USART_CR3_DMAR);
+            assert(GPIOD->MODER==0x87654321 && test_enabled[USART3_IRQn]);
         }
         unsigned count=179;
         assert((TEST_UART->CR1 & USART_CR1_PCE)==0 && TEST_UART->CR3==0);

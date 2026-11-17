@@ -10,7 +10,7 @@ typedef int HAL_StatusTypeDef;
 
 /* Project settings: edit here or override for every driver compilation. */
 #ifndef RC_RX_INVERT
-#define RC_RX_INVERT 1 /* 1 for CN14/Q5 D-Bus input; 0 for direct PD9. */
+#define RC_RX_INVERT 0 /* Direct UART connection uses normal polarity. */
 #endif
 #if RC_RX_INVERT != 0 && RC_RX_INVERT != 1
 #error "RC_RX_INVERT must be 0 or 1"
@@ -29,7 +29,7 @@ typedef struct {
 extern volatile RC_State_t g_rc;
 /* Call after all MX init calls, before starting other UART business.
  * baud is the explicit UART rate in bit/s; e.g. 115200U. No auto-detection.
- * Owns USART3 PD8(TX)/PD9(RX) and TIM5; idle generated UART init is allowed.
+ * Owns UART8 PE1(TX)/PE0(RX) and TIM5; idle generated UART init is allowed.
  * HAL_BUSY: UART DMA/IRQ/transmit active, or timer occupied; no state changed.
  * Do not use this UART concurrently with HAL or another protocol after Init.
  * Same-baud repeated Init is a no-op; different baud returns HAL_BUSY.
