@@ -55,6 +55,7 @@ pyelftools 仍然由脚本自己装进 `.venv`。
 ### 在 VS Code 里启动
 
 在固件工程里按 `Ctrl+Shift+P`，选择「任务: 运行任务」或「Tasks: Run Task」。
+输入 `rc-tune` 时选第一条、名字不带后缀的 `rc-tune` 就是直接启动（会先问是否允许写入）。
 
 | 任务 | 用途 |
 |---|---|

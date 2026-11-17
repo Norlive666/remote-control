@@ -27,6 +27,8 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+# 双击 start.bat 时 cwd 是 tools/rc-tune，而 ELF 和 .vscode 都在上两级的工程根目录。
+PROJECT_ROOT = ROOT.parents[1]
 VENV = ROOT / ".venv"
 TUNE = ROOT / "tune.py"
 MIN_PYTHON = (3, 9)
@@ -181,6 +183,14 @@ def port_open(host: str, port: int, timeout: float = 0.3) -> bool:
         return False
 
 
+def project_root() -> Path:
+    """ELF 和 .vscode 该在哪个目录找：正常从工程根启动就是 cwd，双击 bat 时是上两级。"""
+    for candidate in (Path.cwd(), PROJECT_ROOT):
+        if any((candidate / marker).exists() for marker in ("CMakeLists.txt", ".vscode", "build")):
+            return candidate
+    return Path.cwd()
+
+
 def _looks_like_local_path(config: str) -> bool:
     """`interface/stlink.cfg` 是 OpenOCD 自带的；`.vscode/x.cfg`、`/abs/x.cfg`、`C:\\x.cfg` 才是本地文件。"""
     return config.startswith((".", "/", "\\")) or (
@@ -189,31 +199,42 @@ def _looks_like_local_path(config: str) -> bool:
 
 
 def openocd_args(
-    port: int, extra_configs: list[str], interface: str = DEFAULT_INTERFACE
+    port: int,
+    extra_configs: list[str],
+    interface: str = DEFAULT_INTERFACE,
+    root: Path | None = None,
 ) -> list[str]:
     """组一条 `openocd -f …`：先按当前目录找配置，再带上用户追加的 cfg。
 
     本地 cfg 不存在就跳过——Windows 上解压时经常漏掉 `.vscode` 这类点目录，
     让 OpenOCD 自己报 `Can't find ...` 不如这里先说清楚。
     """
-    args = ["-s", str(Path.cwd())]
+    base = root or Path.cwd()
+    args = ["-s", str(base)]
     for config in (interface, TARGET_CONFIG, *extra_configs):
-        if _looks_like_local_path(config) and not Path(config).is_file():
-            print(f"跳过不存在的 OpenOCD 配置：{config}", flush=True)
-            continue
-        args += ["-f", config]
+        path = Path(config)
+        if _looks_like_local_path(config):
+            if not path.is_file() and (base / config).is_file():
+                path = base / config
+            if not path.is_file():
+                print(f"跳过不存在的 OpenOCD 配置：{config}", flush=True)
+                continue
+        args += ["-f", str(path)]
     args += ["-c", f"gdb_port {port}"]
     return args
 
 
 def spawn_openocd(
-    port: int, extra_configs: list[str], interface: str = DEFAULT_INTERFACE
+    port: int,
+    extra_configs: list[str],
+    interface: str = DEFAULT_INTERFACE,
+    root: Path | None = None,
 ) -> subprocess.Popen:
     """没有现成的 OpenOCD 时自己起一个；输出留在同一个终端里，方便看探针报错。"""
     exe = shutil.which("openocd")
     if exe is None:
         raise StartError("PATH 里找不到 openocd；先装上，或者去掉 --start-ocd、自己启动 OpenOCD。")
-    argv = [exe, *openocd_args(port, extra_configs, interface)]
+    argv = [exe, *openocd_args(port, extra_configs, interface, root)]
     print(f"启动 OpenOCD（探针 {interface}）：{' '.join(argv)}", flush=True)
     return subprocess.Popen(argv)
 
@@ -290,8 +311,15 @@ def venv_python_version(python: Path) -> tuple[int, int] | None:
             text=True,
             timeout=15,
         )
-    except (OSError, subprocess.SubprocessError):
+    except subprocess.TimeoutExpired:
         return None
+    except OSError as exc:
+        # 起不来说明「这一次没能执行」，不等于环境坏了；删掉 .venv 再重装代价太大。
+        raise StartError(
+            f"无法执行虚拟环境里的 Python（{python}）：{exc}\n"
+            "这通常是权限、杀毒软件或文件系统 noexec 拦住了，不是环境损坏。\n"
+            "确认后可以手动删掉 .venv 再启动，脚本会重新创建。"
+        ) from exc
     if done.returncode != 0:
         return None
     parts = done.stdout.split()
@@ -414,14 +442,15 @@ def run(args: argparse.Namespace) -> int:
         # 换了后端（比如从 openocd 切到 pyocd）时补装缺的包。
         install_deps(Path(sys.executable), args.index_url, args.backend)
 
-    elf = Path(args.elf).expanduser().resolve() if args.elf else find_elf(Path.cwd())
+    root = project_root()
+    elf = Path(args.elf).expanduser().resolve() if args.elf else find_elf(root)
     if not elf.is_file():
         raise StartError(f"ELF 不存在：{elf}")
 
     if not args.ocd_config:
-        default_cfg = Path(".vscode/h7-debug-unlock.cfg")
+        default_cfg = root / ".vscode/h7-debug-unlock.cfg"
         if default_cfg.is_file():
-            args.ocd_config = [".vscode/h7-debug-unlock.cfg"]
+            args.ocd_config = [str(default_cfg)]
 
     spawned = False
     if args.backend == "openocd-tcl":
@@ -441,7 +470,7 @@ def run(args: argparse.Namespace) -> int:
                     + "\n先停掉它（Ctrl+C / kill），或者用 --ocd-port 指定它的 gdb_port。"
                     "\n同时起两个 OpenOCD 会抢同一个探针。"
                 )
-            interface = resolve_interface(args.interface, Path.cwd())
+            interface = resolve_interface(args.interface, root)
             candidates = [interface]
             if not args.interface:
                 for other in INTERFACE_FALLBACKS:
@@ -449,7 +478,7 @@ def run(args: argparse.Namespace) -> int:
                         candidates.append(other)
             last_error: StartError | None = None
             for index, config in enumerate(candidates):
-                proc = spawn_openocd(args.ocd_port, args.ocd_config, config)
+                proc = spawn_openocd(args.ocd_port, args.ocd_config, config, root)
                 try:
                     wait_for_port(proc, args.ocd_host, args.ocd_port)
                 except StartError as exc:

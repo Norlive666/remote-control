@@ -1,6 +1,9 @@
 @echo off
 chcp 65001 >nul
 setlocal
+rem Run from the project root: double-clicking leaves the cwd in tools\rc-tune,
+rem and both the ELF search and .vscode\h7-debug-unlock.cfg are relative to it.
+if exist "%~dp0..\..\CMakeLists.txt" cd /d "%~dp0..\.."
 rem Find Python: bundled portable build first, then PATH python, then py -3 / python3.
 rem The py launcher may point at an uninstalled interpreter, so it goes last.
 rem Keep this file ASCII-only: cmd.exe parses .bat in the OEM codepage, and

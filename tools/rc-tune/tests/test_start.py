@@ -324,3 +324,57 @@ def test_openocd_args_use_the_given_interface(monkeypatch, tmp_path):
 
     assert "interface/cmsis-dap.cfg" in args
     assert "interface/stlink.cfg" not in args
+
+
+def test_project_root_falls_back_to_the_parent_of_tools(monkeypatch, tmp_path):
+    """双击 start.bat 时 cwd 在 tools/rc-tune，ELF 和 .vscode 却在工程根。"""
+    import start
+
+    root = tmp_path / "proj"
+    (root / ".vscode").mkdir(parents=True)
+    (root / "tools" / "rc-tune").mkdir(parents=True)
+    monkeypatch.setattr(start, "PROJECT_ROOT", root)
+    monkeypatch.chdir(root / "tools" / "rc-tune")
+
+    assert start.project_root() == root
+
+
+def test_project_root_keeps_cwd_when_it_is_a_project(monkeypatch, tmp_path):
+    import start
+
+    monkeypatch.setattr(start, "PROJECT_ROOT", tmp_path / "elsewhere")
+    project = tmp_path / "proj"
+    (project / ".vscode").mkdir(parents=True)
+    monkeypatch.chdir(project)
+
+    assert start.project_root() == project
+
+
+def test_openocd_args_find_a_local_config_under_the_project_root(tmp_path):
+    from start import openocd_args
+
+    root = tmp_path / "proj"
+    (root / ".vscode").mkdir(parents=True)
+    cfg = root / ".vscode" / "h7-debug-unlock.cfg"
+    cfg.write_text("")
+
+    args = openocd_args(3333, [".vscode/h7-debug-unlock.cfg"], root=root)
+
+    assert str(cfg) in args
+
+
+def test_venv_that_cannot_execute_is_kept(monkeypatch, tmp_path):
+    """执行被拒（EPERM/EACCES）不是环境损坏，不能把 .venv 删掉重装。"""
+    import start
+
+    venv = tmp_path / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    python = venv / "bin" / "python"
+    python.write_text("#!/bin/sh\nexit 0\n")
+    python.chmod(0o644)
+    monkeypatch.setattr(start, "VENV", venv)
+
+    with pytest.raises(StartError, match="无法执行"):
+        start.ensure_venv(None, "openocd")
+
+    assert python.exists()
