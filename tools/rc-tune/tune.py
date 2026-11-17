@@ -14,6 +14,7 @@ import hmac
 import json
 import socket
 import struct
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,14 @@ FRAME_SIZE = 20
 VERSION = "rc-tune/1"
 # 断流后写入的安全值：输出归零、标记为停止、断开 link_valid。
 NEUTRAL = {"axes": (0, 0, 0, 0), "sliders": (0, 0, 0, 0), "enabled": 0, "stopped": 1, "link_valid": 0}
+
+
+# 英文 Windows 的管道输出是 cp1252，打印中文会抛 UnicodeEncodeError。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 
 class TuneError(Exception):

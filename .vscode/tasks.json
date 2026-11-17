@@ -5,9 +5,9 @@
       "label": "rc-tune",
       "detail": "命令面板输入 rc-tune 直接启动；会先问是否允许写入",
       "type": "shell",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "options": {
         "cwd": "${workspaceFolder}"
@@ -24,10 +24,10 @@
     {
       "label": "rc-tune: 与 Live Watch 一起启动",
       "detail": "先用 F5 启动 OpenOCD。自动找唯一的 ELF 和 Tcl 端口，允许 App 写入 g_rc",
-      "type": "process",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "type": "shell",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "args": [
         "--backend",
@@ -47,10 +47,10 @@
     {
       "label": "rc-tune: 与 Live Watch 一起启动（指定 ELF 和端口）",
       "detail": "自动识别失败时使用，端口填 F5 日志中的 tcl_port，允许 App 写入 g_rc",
-      "type": "process",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "type": "shell",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "args": [
         "--backend",
@@ -75,9 +75,9 @@
       "label": "rc-tune: 启动（先只读）",
       "detail": "连已运行的 OpenOCD（gdb_port 3333），自动找 ELF，开 HTTP 桥接器；用命令面板的「Tasks: Run Task」启动",
       "type": "shell",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "args": [
         "--backend",
@@ -100,9 +100,9 @@
       "label": "rc-tune: 启动（允许写入）",
       "detail": "同上，但允许把 App 的操作写进 g_rc。确认机器人已架空再跑",
       "type": "shell",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "args": [
         "--backend",
@@ -125,9 +125,9 @@
       "label": "rc-tune: 启动（指定 ELF）",
       "detail": "自动查找不准时用；会弹框问固件路径，写入权限按终端里的提问回答",
       "type": "shell",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "args": [
         "--backend",
@@ -151,9 +151,9 @@
       "label": "rc-tune: 用 pyOCD 启动（自己占探针）",
       "detail": "没有 OpenOCD 时用；会独占 DAPLink，首次要装 15 MB 的 pyocd",
       "type": "shell",
-      "command": "${workspaceFolder}/tools/rc-tune/start.sh",
+      "command": "\"${workspaceFolder}/tools/rc-tune/start.sh\"",
       "windows": {
-        "command": "${workspaceFolder}\\tools\\rc-tune\\start.bat"
+        "command": "\"${workspaceFolder}\\tools\\rc-tune\\start.bat\""
       },
       "args": [
         "--backend",

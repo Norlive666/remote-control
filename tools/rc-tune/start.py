@@ -31,6 +31,13 @@ ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parents[1]
 VENV = ROOT / ".venv"
 TUNE = ROOT / "tune.py"
+# 英文 Windows 的管道输出是 cp1252，打印中文会抛 UnicodeEncodeError；换成替换字符就不崩。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 MIN_PYTHON = (3, 9)
 # 按优先级找固件：先当前目录，再常见的构建输出目录。
 # 递归查找时跳过的目录：都是依赖/缓存，走进去只会拖慢启动。
@@ -98,21 +105,72 @@ def missing_deps(python: Path, backend: str = "openocd") -> bool:
     return subprocess.call(probe, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0
 
 
-def openocd_processes() -> list[str]:
-    """正在跑的 openocd 进程（`pgrep -ax`：按进程名精确匹配）。
-
-    不能用 `-af openocd`——那样会连 start.py 自己（参数里就有 `openocd`）一起匹配上。
-    """
-    pgrep = shutil.which("pgrep")
-    if pgrep is None:
+def _windows_command_lines() -> list[str]:
+    """Windows 上没有 pgrep：用 PowerShell（新系统）或 wmic（老系统）读 openocd.exe 的命令行。"""
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    if ps:
+        script = (
+            "Get-CimInstance Win32_Process -Filter \"name='openocd.exe'\" "
+            "| ForEach-Object { $_.CommandLine }"
+        )
+        try:
+            done = subprocess.run(
+                [ps, "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            done = None
+        if done is not None and done.stdout.strip():
+            return [line.strip() for line in done.stdout.splitlines() if line.strip()]
+    wmic = shutil.which("wmic")
+    if wmic is None:
         return []
     try:
-        result = subprocess.run(
-            [pgrep, "-ax", "openocd"], capture_output=True, text=True, timeout=2, check=False
+        done = subprocess.run(
+            [wmic, "process", "where", "name='openocd.exe'", "get", "commandline"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return [
+        line.strip()
+        for line in done.stdout.splitlines()
+        if line.strip() and "CommandLine" not in line
+    ]
+
+
+def _command_lines() -> list[str]:
+    """所有进程的命令行。Linux 用 `ps -eo args=`，macOS 用 `ps -axo command=`。"""
+    if os.name == "nt":
+        return _windows_command_lines()
+    args = ["ps", "-eo", "args="] if sys.platform != "darwin" else ["ps", "-axo", "command="]
+    try:
+        done = subprocess.run(args, capture_output=True, text=True, timeout=3, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return done.stdout.splitlines()
+
+
+def _is_openocd(line: str) -> bool:
+    """按可执行文件名精确匹配——用 `pgrep -af openocd` 会连 start.py 自己一起匹配上。"""
+    parts = line.split()
+    if not parts:
+        return False
+    # `ps` 只给命令行；`pgrep` 会带一列 pid，两种都接受。
+    executable = parts[1] if parts[0].isdigit() and len(parts) > 1 else parts[0]
+    name = executable.strip('"').replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return name in {"openocd", "openocd.exe"}
+
+
+def openocd_processes() -> list[str]:
+    """正在跑的 openocd 的命令行（Windows / macOS / Linux 都能用）。"""
+    return [line for line in _command_lines() if _is_openocd(line)]
 
 
 def detect_openocd_port(kind: str = "gdb") -> int | None:
@@ -219,7 +277,13 @@ def openocd_args(
             if not path.is_file():
                 print(f"跳过不存在的 OpenOCD 配置：{config}", flush=True)
                 continue
-        args += ["-f", str(path)]
+        arg = str(path)
+        if _looks_like_local_path(config):
+            try:
+                arg = str(path.resolve().relative_to(base.resolve()))
+            except ValueError:
+                pass
+        args += ["-f", arg]
     args += ["-c", f"gdb_port {port}"]
     return args
 
@@ -248,15 +312,17 @@ def wait_for_port(proc: subprocess.Popen, host: str, port: int, timeout: float =
             raise StartError(
                 f"OpenOCD 启动失败（退出码 {proc.returncode}）——上面「Error: open failed」那行就是原因。\n"
                 "常见情况：\n"
-                "  1. 探针被占着：`pgrep -ax openocd` 看有没有残留进程，有就先 kill 掉；\n"
-                "  2. 探针没识别：`lsusb | grep -i st-link` 看不到就重新插拔一次 USB；\n"
+                "  1. 探针被占着：`pgrep -ax openocd`（Windows 用任务管理器）看有没有残留进程，有就先 kill 掉；\n"
+                "  2. 探针没识别：Linux `lsusb | grep -i st-link`、macOS `system_profiler SPUSBDataType`、\n"
+                "     Windows 设备管理器里看不到就重新插拔一次 USB；\n"
                 "  3. 也可以不自己起：关掉 VS Code 的调试会话，然后用它留下的 OpenOCD（去掉 --start-ocd）。"
             )
         time.sleep(0.1)
     stop_openocd(proc)
     raise StartError(
         f"OpenOCD 10 秒内没在 {host}:{port} 开 gdb server。\n"
-        "检查探针是否插好（`lsusb | grep -i st-link`）、是否被别的程序占用（`pgrep -ax openocd`）。"
+        "检查探针是否插好（Linux `lsusb | grep -i st-link`，Windows 设备管理器）、"
+        "是否被别的程序占用（Linux/macOS 用 `pgrep -ax openocd`，Windows 看任务管理器）。"
     )
 
 
@@ -278,7 +344,7 @@ def ensure_openocd(host: str, port: int, timeout: float = 0.5) -> None:
     except OSError as exc:
         raise StartError(
             f"连不上 OpenOCD（{host}:{port}）：{exc}\n"
-            "请先按你平时的任务启动 OpenOCD。端口不确定就看一眼 `pgrep -a openocd`，"
+            "请先按你平时的任务启动 OpenOCD。端口不确定就看一眼 OpenOCD 的启动日志（`gdb_port N`），"
             "里面通常有 `-c gdb_port 50001` 这样的字样；也可以用 --ocd-port 指定，"
             "或者干脆用 --ocd-port 0 让脚本自己探测。\n"
             "没有 OpenOCD，或者想让桥接器自己占用探针，就用 --backend pyocd。"

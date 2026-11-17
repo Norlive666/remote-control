@@ -96,38 +96,30 @@ def test_ignores_elfs_in_dependency_dirs(tmp_path):
     assert find_elf(tmp_path).name == "robot.elf"
 
 
-def _fake_pgrep(monkeypatch, stdout: str) -> None:
-    class Done:
-        pass
-
-    done = Done()
-    done.stdout = stdout
-    monkeypatch.setattr("start.subprocess.run", lambda *a, **k: done)
+def _fake_processes(monkeypatch, stdout: str) -> None:
+    monkeypatch.setattr("start._command_lines", lambda: stdout.splitlines())
 
 
-@pytest.mark.skipif(__import__("shutil").which("pgrep") is None, reason="需要 pgrep")
 def test_detects_gdb_port_from_running_openocd(monkeypatch):
     from start import detect_openocd_port
 
-    _fake_pgrep(monkeypatch, '4242 openocd -f interface/stlink.cfg -c "gdb_port 50001" -f target/stm32h7x.cfg\n')
+    _fake_processes(monkeypatch, '4242 openocd -f interface/stlink.cfg -c "gdb_port 50001" -f target/stm32h7x.cfg\n')
 
     assert detect_openocd_port() == 50001
 
 
-@pytest.mark.skipif(__import__("shutil").which("pgrep") is None, reason="需要 pgrep")
 def test_ignores_dynamic_zero_port(monkeypatch):
     from start import detect_openocd_port
 
-    _fake_pgrep(monkeypatch, '4242 openocd -c "gdb_port 0"\n')
+    _fake_processes(monkeypatch, '4242 openocd -c "gdb_port 0"\n')
 
     assert detect_openocd_port() is None
 
 
-@pytest.mark.skipif(__import__("shutil").which("pgrep") is None, reason="需要 pgrep")
 def test_detects_gdb_port_written_as_two_words(monkeypatch):
     from start import detect_openocd_port
 
-    _fake_pgrep(monkeypatch, '4242 openocd -f interface/stlink.cfg -c "gdb port 50002" -f target/stm32h7x.cfg\n')
+    _fake_processes(monkeypatch, '4242 openocd -f interface/stlink.cfg -c "gdb port 50002" -f target/stm32h7x.cfg\n')
 
     assert detect_openocd_port() == 50002
 
@@ -178,23 +170,14 @@ def test_tcl_start_does_not_launch_another_openocd(monkeypatch):
         start.run(args)
 
 
-def test_pgrep_matches_the_exact_process_name(monkeypatch):
-    import start
+def test_openocd_processes_match_only_the_executable():
+    """start.py 自己的命令行里也有 openocd 这个词，不能被当成一个实例。"""
+    from start import _is_openocd
 
-    seen = {}
-
-    class Done:
-        stdout = ""
-
-    def fake_run(argv, **kwargs):
-        seen["argv"] = argv
-        return Done()
-
-    monkeypatch.setattr("start.subprocess.run", fake_run)
-
-    start.openocd_processes()
-
-    assert "-ax" in seen["argv"]
+    assert _is_openocd('/usr/bin/openocd -f interface/stlink.cfg')
+    assert _is_openocd('"C:\\Tools\\openocd.exe" -f interface/stlink.cfg')
+    assert not _is_openocd('python3 tools/rc-tune/start.py --backend openocd')
+    assert not _is_openocd('')
 
 
 def test_openocd_args_include_configs_and_port(monkeypatch, tmp_path):
@@ -360,7 +343,7 @@ def test_openocd_args_find_a_local_config_under_the_project_root(tmp_path):
 
     args = openocd_args(3333, [".vscode/h7-debug-unlock.cfg"], root=root)
 
-    assert str(cfg) in args
+    assert ".vscode/h7-debug-unlock.cfg" in args
 
 
 def test_venv_that_cannot_execute_is_kept(monkeypatch, tmp_path):
